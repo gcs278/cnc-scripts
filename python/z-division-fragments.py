@@ -28,7 +28,7 @@ argFileDir="C:\\Mach3\\argFiles\\"
 argFileGlob=argFileDir + "z-multi*.txt"
 tmpdir = 'C:\\tmp\\'
 audioDir = rootdir + "\\CNC_Data\\audio_clips\\"
-playwave = rootdir + "\\CNC_Data\\playwave.py"
+playwave = rootdir + "\\cnc-scripts\\python\\playwave.py"
 python = "C:\\Python27\\python.exe"
 DEBUG=False
 MAC=False
@@ -247,7 +247,42 @@ def findNewOffset(y, slopes, zeros):
 		newOffset = mySlope*(yCenter-y)
 	return newOffset
 
-def combineFragments(realZindex, fragmentsDir, fragments):
+# Function that take our standard regex match and applies the provided offset
+# to build a new gcode string
+def gcodeBuilder(match, xJigOffset=0, yJigOffset=0, zOffset=0):
+	######### X Section - Apply jig X offset ############
+	xArg = ""
+	if match.group(3):
+		x = float(match.group(3))
+		newX = x+xJigOffset
+		xArg = "X" + "{0:.4f}".format(newX)
+
+	######### Y Section - Apply jig Y offset ############
+	yArg = ""
+	if match.group(6):
+		y = float(match.group(6))
+		newY = y + yJigOffset
+		yArg = "Y" + "{0:.4f}".format(newY)
+
+	######### Z Section - Apply double jig Z offset ############
+	zArg = ""
+	if match.group(9):
+		z = float(match.group(9))
+		newZ=z+zOffset
+		zArg = "Z" + "{0:.4f}".format(newZ)
+
+	######### F Section ############
+	fArg = ""
+	if match.group(11):
+		fArg = str(match.group(11))
+	
+	# Print new adjusted new gcode
+	gArg = str(match.group(0)[:2]) # Get's either G0 or G1
+	newGcode = gArg + xArg + yArg + zArg + fArg
+	return newGcode
+
+# Function combines fragmentated multi z process files into a single gcode
+def combineFragments(realZindex, fragmentsDir, jigFragments, jigs):
 	timestr = time.strftime("%Y%m%d-%H%M%S")
 	parentName = os.path.splitext(os.path.basename(fragmentsDir))[0]
 	fragmentsDirTmp=fragmentsDir + slash + "fragments-" + timestr
@@ -283,71 +318,59 @@ def combineFragments(realZindex, fragmentsDir, fragments):
 		for gcode in gcodeHeader:
 			outFile.write(gcode + '\n')
 
-		for fragment in fragments:
-			fileName = fragment[0]
-			fragmentZ = float(fragment[1])
+		# For each of jigs, write a new balanced gcode
+		jigCount = 0
+		for jig in jigs:
+			# For each jig, get all of the fragments
+			for fragment in jigFragments[jigCount][1]:
+				fileName = fragment[0]
+				fragmentZ = float(fragment[1])
+				xJigOffset = float(jig[0])
+				yJigOffset = float(jig[1])
+				# Offset that should be applied to Z
+				zOffset = fragmentZ - realZindex
+				fragmentFile = fragmentsDir + slash + fileName
+				if DEBUG:
+					print("Fragment:\t" + fileName)
+					print("RealZIndex:\t" + str(realZindex))
+					print("My Z:\t\t" + str(fragmentZ))
+					print("zOffset:\t"+ str(zOffset))
+					print("xJigOffset:\t" + str(xJigOffset))
+					print("yJigOffset:\t" + str(yJigOffset))
 
-			# Offset that should be applied to Z
-			zOffset = fragmentZ - realZindex
-			fragmentFile = fragmentsDir + slash + fileName
-			if DEBUG:
-				print("Fragment:\t" + fileName)
-				print("RealZIndex:\t" + str(realZindex))
-				print("My Z:\t\t" + str(fragmentZ))
-				print("zOffset:\t"+ str(zOffset))
+				# First open the fragment piece file for reading
+				with open(fragmentFile) as file:
+					# Then write also a new individual fragment file (for debuging or fixing errors)
+					with open(fragmentsDirTmp + slash + "J" + str(jigCount) + "-" + fileName,"a") as individualFragmentFile:
+						# Write our standard gcode header to individual fragmentn
+						for gcode in gcodeHeader:
+							individualFragmentFile.write(gcode + '\n')
 
-			# First open the fragment pice file for reading
-			with open(fragmentFile) as file:
-				# Then open new individual fragment file (for debuging or fixing errors)
-				with open(fragmentsDirTmp + slash + fileName,"a") as individualFragmentFile:
-					# Write our standard gcode header to individual fragmentn
-					for gcode in gcodeHeader:
-						individualFragmentFile.write(gcode + '\n')
+						# Read each GCODE command
+						for line in file:
+							line_clean = line.strip()
 
-					# Read each GCODE command
-					for line in file:
-						line_clean = line.strip()
+							if line_clean == "G91":
+								messagebox.showerror("Warning!","G91 is present in " + n + " I didn't write the app with that in mind.")
 
-						if line_clean == "G91":
-							messagebox.showerror("Warning!","G91 is present in " + n + " I didn't write the app with that in mind.")
+							if not any(line_clean in s for s in gcodeHeader) and not any(line_clean in s for s in gcodeFooter):
+								match = gcodeRegex.match(line_clean)
 
-						if not any(line_clean in s for s in gcodeHeader) and not any(line_clean in s for s in gcodeFooter):
-							match = gcodeRegex.match(line_clean)
-
-							# Get X and Y ONLY for knowing if they both 0 to not print
-							if match.group(6) and match.group(3):
+								# Get X and Y ONLY for knowing if they both 0 to not print
+								if match.group(6) and match.group(3):
 									y = float(match.group(6))
 									x = float(match.group(3))
-
 									if x == 0.00 and y == 0.00:
 										continue
 
-							# If we have a Z instruction
-							if match.group(9):
-								z = float(match.group(9))
-								newZ = round(z + zOffset,4)
-								####### F Section ############
-								f = ""
-								if match.group(11):
-									f = str(match.group(11))
+								newGcode = gcodeBuilder(match,xJigOffset,yJigOffset,zOffset)
+								outFile.write(newGcode + "\n")
+								individualFragmentFile.write(newGcode + "\n")
 
-								# Build the new line (F comes after Z sometimes)
-								newLine=str(match.group(1) + "Z" + str(newZ)) + f
-
-								outFile.write(newLine + "\n")
-								individualFragmentFile.write(newLine + "\n")
-								# if DEBUG:
-								# 	print("OLD: " + line_clean)
-								# 	print("NEW: " + newLine)
-								# 	print("OFFSET: " + str(zOffset))
-							else:
-								# Else just copy the line
-								outFile.write(line)
-								individualFragmentFile.write(line)
-
-					# Write our standard gcode footer on the INDIVIDUAL FILES
-					for gcode in gcodeFooter:
-						individualFragmentFile.write(gcode + '\n')
+						# Write our standard gcode footer on the INDIVIDUAL FILES
+						for gcode in gcodeFooter:
+							individualFragmentFile.write(gcode + '\n')
+			jigCount += 1
 
 		# Write our standard gcode footer on the COMBO file
 		for gcode in gcodeFooter:
@@ -400,38 +423,10 @@ def doubleJigSimpleZ(doubleJigXoff, doubleJigYoff, realZindex, secondZindex, tar
 				if match.group(15):
 					continue
 
-				######### X Section - Apply double jig X offset ############
-				xArg = ""
-				if match.group(3):
-					x = float(match.group(3))
-					newX = round(x+doubleJigXoff, 4)
-					xArg = "X" + str(newX)
-
-				######### X Section - Apply double jig X offset ############
-				yArg = ""
-				if match.group(6):
-					y = float(match.group(6))
-					newY = round(y+doubleJigYoff, 4)
-					yArg = "Y" + str(newY)
-
-				######### Z Section - Apply double jig Z offset ############
-				zArg = ""
-				if match.group(9):
-					z = float(match.group(9))
-					newZ=round(z+zOffset,4)
-					zArg = "Z" + str(newZ)
-
-				######### F Section ############
-				fArg = ""
-				if match.group(11):
-					fArg = str(match.group(11))
-				
-				# Build new adjusted new gcode
-				gArg = line_clean[:2]
-				newLine = gArg + xArg + yArg + zArg + fArg
+				newGcode = gcodeBuilder(match,doubleJigXoff,doubleJigYoff,zOffset)
 
 			with open(tmpFileName,"a") as file:
-				file.write(newLine + "\n")
+				file.write(newGcode + "\n")
 	return tmpFileName
 
 
@@ -550,15 +545,35 @@ try:
 						elif multiType == "FRAGMENTED":
 							fragments = []
 							realZindex = None
+							xJigOffset = None
+							yJigOffset = None
+							jigs = [] # Represents x and y offsets of a jig
+							jigFragments = []
 							fragmentsDir = file.readline().strip()
 							compiledFile = None
+
 							for line in file:
 								print(line)
-								line_clean  = line.strip().split(' ')
+								line_clean = line.strip().split(' ')
 								if line_clean[0] == "RealIndex":
+									if realZindex is not None:
+										handleError("FATAL ERROR FATAL ERROR: More than one Real Index presented.", True)
 									realZindex = float(line_clean[1])
 								elif line_clean[0].endswith(".gcode"):
 									fragments.append((line_clean[0], float(line_clean[1])))
+								elif line_clean[0] == "xJigOffset":
+									# Once we hit xJigOffset again, we should save our .gcode offsets
+									if len(jigs) > 0:
+										jigFragments.append((len(jigs)-1,fragments))
+										fragments=[]
+									xJigOffset = float(line_clean[1])
+								elif line_clean[0] == "yJigOffset":
+									yJigOffset = float(line_clean[1])
+									jigs.append((xJigOffset, yJigOffset))
+
+							# Store the final fragments
+							jigFragments.append((len(jigs)-1, fragments))
+
 
 							########### Validation ################
 							if DEBUG:
@@ -566,32 +581,33 @@ try:
 								print("Fragments: ")
 								print(fragments)
 							if any(0 in fragment for fragment in fragments) or realZindex is 0:
-								warningMessage="FATAL ERROR FATAL ERROR: fragments or real z index is equal to ZERO! "
-								handleError(warningMessage, True)
+								handleError("FATAL ERROR FATAL ERROR: fragments or real z index is equal to ZERO! ", True)
+							elif xJigOffset is None or yJigOffset is None:
+								handleError("FATAL ERROR FATAL ERROR: Couldn't get jig offsets from arguments file!", True)
+							elif len(jigs) != len(jigFragments):
+								handleError("FATAL ERROR FATAL ERROR: Number of jigs doesn't match jig fragments", True)
+								continue
 							elif realZindex is None:
-								warningMessage="FATAL ERROR FATAL ERROR: Couldn't get real z index from arguments file!"
-								handleError(warningMessage, True)
+								handleError("FATAL ERROR FATAL ERROR: Couldn't get real z index from arguments file!", True)
 							elif fragmentsDir is None:
-								warningMessage="FATAL ERROR FATAL ERROR: Couldn't parse fragments dir from arguments file!"
-								handleError(warningMessage, True)
+								handleError("FATAL ERROR FATAL ERROR: Couldn't parse fragments dir from arguments file!", True)
 							elif not os.path.isdir(fragmentsDir):
-								warningMessage="FATAL ERROR FATAL ERROR: The given fragments dir doesn't exist: " + fragmentsDir
-								handleError(warningMessage, True)
+								handleError("FATAL ERROR FATAL ERROR: The given fragments dir doesn't exist: " + fragmentsDir, True)
 							elif not fragments:
-								warningMessage="FATAL ERROR FATAL ERROR: Couldn't parse fragments values from agruments file"
-								handleError(warningMessage, True)
+								handleError("FATAL ERROR FATAL ERROR: Couldn't parse fragments values from agruments file", True)
 							else:
-								compiledFile = combineFragments(realZindex, fragmentsDir, fragments)
+								compiledFile = combineFragments(realZindex, fragmentsDir, jigFragments, jigs)
 
 							# Compare every value with the real index
 							largestZdiff = 0.00
 							largestZdiffFile = ""
-							for fragment in fragments:
-								zDiff = abs(realZindex - fragment[1])
-								# Store the largest value
-								if zDiff > largestZdiff:
-									largestZdiff = zDiff
-									largestZdiffFile = fragment[0]
+							for fragments in jigFragments:
+								for fragment in fragments[1]:
+									zDiff = abs(realZindex - fragment[1])
+									# Store the largest value
+									if zDiff > largestZdiff:
+										largestZdiff = zDiff
+										largestZdiffFile = fragment[0]
 
 							if largestZdiff > FATAL_Z:
 								warningMessage="FATAL ERROR FATAL ERROR: fragment: "+ largestZdiffFile + " has a z differential larger than " + str(FATAL_Z) + " ! Do not continue. This is very bad."
@@ -610,6 +626,7 @@ try:
 									# Base name
 									doneFile.write(os.path.splitext(os.path.basename(compiledFile))[0])
 									subprocess.Popen([python,playwave,audioDir + wavSuccess])
+
 							# Success message
 							if not compiledFile is None:
 								handleError("Successfully compiled gcode. The largest Z differential is " + str("{0:.3f}".format(largestZdiff)))

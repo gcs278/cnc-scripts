@@ -7,6 +7,23 @@ Dim DEBUG
 DEBUG = False
 Set objFSO=CreateObject("Scripting.FileSystemObject")
 
+' Define the square jigs that we have
+Dim numOfJigs As Integer
+Static jigs (2,2) As Double
+numOfJigs = 1
+jigs(0,0) = 0
+jigs(0,1) = 0
+If GetOEMDRO(2100) = 1 Then
+  numOfJigs = 2
+  jigs(1,0) = 0.5
+  jigs(1,1) = 14
+End If
+
+' Check if we are in my Virtual Machine, if so DEBUG
+If objFSO.FolderExists("Z:\grantspence On My Mac") Then
+  DEBUG = True
+End if
+
 ' Set variable to 1 saying this IS an internal process call
 Call SetOEMDRO (2042, 1)
 
@@ -107,58 +124,78 @@ fragmentDir = gcodeFileMainDir & gcodeFileNameNoExtension
 Dim zinfoFile As String
 zinfoFile = fragmentDir & "\" & gcodeFileNameNoExtension & ".zinfo"
 
-' If we have fragmentation setup
+''''''''''''''''''''''''''' FRAGMENTED Multi Z '''''''''''''''''''''''''''
 If objFSO.FolderExists(fragmentDir) Then
   If objFSO.FileExists(zinfoFile) Then
-    ' First get the real Z in the middle
-    Dim zRealIndex As Double
-    ' Absolute Positioning
-    Code "G90"
-    ' Safe Z
-    Code "G0Z " & safeZ
-    zRealIndex = runZRoutine(xCenter, yCenter, True, False)
-    
+    ' Contents of the argument file
     Dim argFileString As String
     argFileString = "FRAGMENTED" & Chr(13) & Chr(10)
     argFileString = argFileString & fragmentDir & Chr(13) & Chr(10)
-    argFileString = argFileString & "RealIndex " & zRealIndex  & Chr(13) & Chr(10)
-
-    ' Multi Z Fragment loop
-    ' This is stupid, i can't find a way to split an array so I had to use new lines
-    Dim fileName As String
-    Dim zX As Double
-    Dim zY As Double
-    zX = 0
-    zY = 0
-    Set zFile = objFSO.OpenTextFile(zinfoFile)
-    Do Until zFile.AtEndOfStream
-      Dim infoLine As String
-      infoLine = zFile.ReadLine
-      If Not IsNumeric(infoLine) Then
-        fileName = Str(infoLine)
-      ElseIf zX > width or zY > (yCenter*2) Then
-        Code "(ERROR: Value in Zinfo is larger than width or height)"
-        Begin Dialog ButtonSampleTest1 16,32,150,96,"ERROR"
-          Text 10,12,130,60, "ERROR: Value in Zinfo is larger than width or height. Something is wrong contact Grant." 
-          OKButton 30,70,40,14
-          'CancelButton 80, 70,40,14
-        End Dialog
-        Dim Dlg3 As ButtonSampleTest1
-        Dialog Dlg3
-        Exit Sub
-      ElseIf zX = 0 Then
-        zX = CDbl(infoLine)
-      Else
-        zY = CDbl(infoLine)
-        'Print("got it: " & fileName & " " & Str(zX) & " " & Str(zY))
-        Dim curZIndex As Double
-        curZIndex = runZRoutine(zX,zY,False, True)
-        argFileString = argFileString & fileName & " " & curZIndex & Chr(13) & Chr(10)
-        zX = 0
-        zY = 0
+   
+    ' For each of the jigs, do multi Z
+    Dim I as Integer
+    For I = 0 To (numOfJigs-1)
+      Dim firstJig As Boolean
+      firstJig = true
+      if I > 0 Then
+        firstJig = false
       End If
-    Loop
-    zFile.Close
+      Dim xJigOffset As Double, yJigOffset As Double
+      xJigOffset = jigs(I,0)
+      yJigOffset = jigs(I,1)
+
+      ' First get the real Z in the middle
+      Dim zRealIndex As Double
+      ' Absolute Positioning
+      Code "G90"
+      ' Safe Z
+      Code "G0Z " & safeZ
+      zRealIndex = runZRoutine(xCenter + xJigOffset, yCenter + yJigOffset, firstJig, False)
+      
+      ' Only write RealIndex for first first jig
+      if firstJig then
+        argFileString = argFileString & "RealIndex " & zRealIndex  & Chr(13) & Chr(10)
+      End If
+      argFileString = argFileString & "xJigOffset " & xJigOffset & Chr(13) & Chr(10)
+      argFileString = argFileString & "yJigOffset " & yJigOffset & Chr(13) & Chr(10)
+
+      ' Multi Z Fragment loop
+      ' This is stupid, i can't find a way to split an array so I had to use new lines
+      Dim fileName As String
+      Dim zX As Double
+      Dim zY As Double
+      zX = 0
+      zY = 0
+      Set zFile = objFSO.OpenTextFile(zinfoFile)
+      Do Until zFile.AtEndOfStream
+        Dim infoLine As String
+        infoLine = zFile.ReadLine
+        If Not IsNumeric(infoLine) Then
+          fileName = Str(infoLine)
+        ElseIf (zX + xJigOffset) > (width+ xJigOffset) Or (zY + yJigOffset) > ((yCenter*2)+yJigOffset) Then
+          Code "(ERROR: Value in Zinfo is larger than width or height)"
+          Begin Dialog ButtonSampleTest1 16,32,150,96,"ERROR"
+            Text 10,12,130,60, "ERROR: Value in Zinfo is larger than width or height. Something is wrong contact Grant." 
+            OKButton 30,70,40,14
+            'CancelButton 80, 70,40,14
+          End Dialog
+          Dim Dlg3 As ButtonSampleTest1
+          Dialog Dlg3
+          Exit Sub
+        ElseIf zX = 0 Then
+          zX = CDbl(infoLine) + xJigOffset
+        Else
+          zY = CDbl(infoLine) + yJigOffset
+          'Print("got it: " & fileName & " " & Str(zX) & " " & Str(zY))
+          Dim curZIndex As Double
+          curZIndex = runZRoutine(zX,zY,False, True)
+          argFileString = argFileString & fileName & " " & curZIndex & Chr(13) & Chr(10)
+          zX = 0
+          zY = 0
+        End If
+      Loop
+      zFile.Close
+    Next
 
     ' Write everything at once
     Set argFile = objFSO.CreateTextFile(outFilePath,True)
@@ -174,7 +211,9 @@ If objFSO.FolderExists(fragmentDir) Then
     Dim Dlg1 As ButtonSample
     Dialog Dlg1 
   End If
-else
+
+Else
+  ''''''''''''''''''''''''''' THREEPOINT MULTI Z ''''''''''''''''''''''''''''''''
   ' Absolute Positioning
   Code "G90"
   ' Safe Z
@@ -235,7 +274,7 @@ Set doneFile = objFSO.OpenTextFile(doneFilePath)
 Dim count As Integer
 count = 1
 Do Until doneFile.AtEndOfStream
-  if count = 1 Then
+  If count = 1 Then
     compiledGcodeFile = doneFile.ReadLine
   Elseif count = 2 Then  
     compiledgcodeFileName = doneFile.ReadLine
@@ -243,7 +282,7 @@ Do Until doneFile.AtEndOfStream
   count= count +1
 Loop
 
-if compiledGcodeFile = "" or not objFSO.FileExists(compiledGcodeFile) Then
+If compiledGcodeFile = "" Or Not objFSO.FileExists(compiledGcodeFile) Then
   MsgBox "Error: Done File doens't contain compiled path. Something went wrong with the multi z process. Contact Grant. Do not continue unless you know what you are doing."
   Code "(ERROR: Done file is missing compiled file path)"
   Exit Sub
@@ -327,3 +366,4 @@ Function runZRoutine(zX As Double, zY As Double, realIndex As Boolean, skipVerif
   runZRoutine = GetOEMDRO(2036)
 
 End Function
+
