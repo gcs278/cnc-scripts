@@ -49,6 +49,7 @@ FATAL_Z=0.5
 # Initialize Watson
 ttsWatson = TtsWatson('990e8a8e-0727-4d98-93a8-921a27d5202d', 'sdcoWYFtMXEA', 'en-US_MichaelVoice')
 
+# Mac specific logic
 if MAC:
 	rootdir = '/Users/grantspence/Google Drive/GS_Custom_Woodworking'
 	tmpdir = '/tmp/gcode_tmp/'
@@ -67,12 +68,26 @@ gcodeRegex=re.compile(regexStr)
 gcodeHeader=["T1","M1031","G17","G20","G90","G0S16000M3"]
 gcodeFooter=["G0X0.0000Y0.0000", "M1030","M02"]
 
+# Log file logic
+log_dir=rootdir + slash + "logs"
+if not os.path.exists(log_dir):
+	os.makedirs(log_dir)
+
+if os.path.exists("Z:\\grantspence On My Mac"):
+	logFilePath = log_dir + slash + "z-division-logs-DEBUG.log"	
+else:
+	logFilePath = log_dir + slash + "z-division-logs.log"	
+logFile = open(logFilePath, 'a')
+
 # Function to speak messages with a voice
 # handles connection errors
 def handleError(message, fatal=False):
 	interpolingProc.kill()
 	print message
+	logFile.write(message + '\n')
 	message = message.replace("gcode"," gee code")
+
+	# WRONG WRONG WRONG - Audio
 	if fatal:
 		subprocess.call([python,playwave,audioDir + wavError])
 		subprocess.call([python,playwave,audioDir + wavError])
@@ -90,7 +105,7 @@ def handleError(message, fatal=False):
 		subprocess.Popen([python,playwave,audioDir + wavConnetionError])
 		print "ERROR: Could not connect to the Watson API! No internet connection!"
 
-def mainLogic(zZeros, logFile):
+def mainLogic(zZeros):
 	fileBaseName=os.path.splitext(os.path.basename(targetFile))[0]
 	tmpFile=fileBaseName+"_TEMPORARY_COPY.gcode"
 	tmpTmpFile=fileBaseName+"_WORKING.gcode"
@@ -406,6 +421,7 @@ def doubleJigSimpleZ(doubleJigXoff, doubleJigYoff, realZindex, secondZindex, tar
 	if DEBUG:
 		print "Double Jig Simple Z"
 		print "Z Offset" + str(zOffset)
+
 	# Second add the second jig file, with the offset
 	with open(targetFile) as file:
 		for line in file:
@@ -423,26 +439,11 @@ def doubleJigSimpleZ(doubleJigXoff, doubleJigYoff, realZindex, secondZindex, tar
 				if match.group(15):
 					continue
 
-				newGcode = gcodeBuilder(match,doubleJigXoff,doubleJigYoff,zOffset)
+				newLine = gcodeBuilder(match,doubleJigXoff,doubleJigYoff,zOffset)
 
 			with open(tmpFileName,"a") as file:
-				file.write(newGcode + "\n")
+				file.write(newLine + "\n")
 	return tmpFileName
-
-
-#argFile="/Users/grantspence/test"
-if MAC:
-	log_dir=rootdir+"/logs"
-else:
-	log_dir=rootdir+"\\logs"
-
-if not os.path.exists(log_dir):
-	os.makedirs(log_dir)
-
-if MAC:
-	logFilePath = log_dir + "/z-division-logs-MACDEBUG.log"	
-else:
-	logFilePath = log_dir + "\\z-division-logs.log"	
 
 try:
 	while True:
@@ -459,217 +460,221 @@ try:
 					print("Processing ArgFile: " + argFile)
 				interpolingProc = subprocess.Popen([python,playwave,audioDir + wavInterpolating])
 				
-				with open(logFilePath, 'a') as logFile:
-					logFile.write("\n-----------------------------------------------------------------------------\n")
-					logFile.write("Current Time:\t" + time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()) + "\n")
-					with open(argFile) as file:
-						multiType = file.readline().strip()
-						print multiType
-						logFile.write("Z Program Type: " + multiType)
-						if multiType == "THREEPOINT":
-							zArgs = file.readline() # int int int \r\n
-							logFile.write("ZArgs:\t\t\t" + zArgs)
-							yArgs = file.readline() # int int int \r\n
-							logFile.write("YArgs:\t\t\t" + yArgs)
-							yCenter = float(file.readline()) # int int int \r\n
-							logFile.write("YCenter:\t\t" + str(yCenter) + "\n")
-							targetFile = os.path.expanduser(file.readline()).strip() # string
-							# Replace for my vm environment to work
-							targetFile = targetFile.replace("Z:\\\\","\\\\vmware-host\\")
-							targetFile = targetFile.replace("z:\\\\","\\\\vmware-host\\")
-							logFile.write("File:\t\t\t" + targetFile + "\n")
-							print targetFile
-							compiledFile = None
-							if not os.path.exists(targetFile):
-								error="The gcodefile arg file given isn't found. I'm cleaning this up"
+				logFile.write("\n-----------------------------------------------------------------------------\n")
+				logFile.write("Current Time:\t" + time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()) + "\n")
+				with open(argFile) as file:
+					multiType = file.readline().strip()
+					print multiType
+					logFile.write("Z Program Type: " + multiType + "\n")
+					if multiType == "THREEPOINT":
+						zArgs = file.readline() # int int int \r\n
+						logFile.write("ZArgs:\t\t\t" + zArgs)
+						yArgs = file.readline() # int int int \r\n
+						logFile.write("YArgs:\t\t\t" + yArgs)
+						yCenter = float(file.readline()) # int int int \r\n
+						logFile.write("YCenter:\t\t" + str(yCenter) + "\n")
+						targetFile = os.path.expanduser(file.readline()).strip() # string
+						# Replace for my vm environment to work
+						targetFile = targetFile.replace("Z:\\\\","\\\\vmware-host\\")
+						targetFile = targetFile.replace("z:\\\\","\\\\vmware-host\\")
+						print targetFile
+						logFile.write("File:\t\t\t" + targetFile + "\n")
+						compiledFile = None
+						if not os.path.exists(targetFile):
+							error="The gcodefile arg file given isn't found. I'm cleaning this up"
+							handleError(error)
+						else: 
+							zArgList = zArgs.split()
+							yArgList = yArgs.split()
+							if len(yArgList) < 3 or float(yArgList[0]) == 0.00 or float(yArgList[1]) == 0.00 or float(yArgList[2]) == 0.00:
+								error='ERROR: Either yArgs are nothing or there is a zero in the Yargs and should never be a zero'
 								print error
-								logFile.write(error)
-							else: 
-								zArgList = zArgs.split()
-								yArgList = yArgs.split()
-								if len(yArgList) < 3 or float(yArgList[0]) == 0.00 or float(yArgList[1]) == 0.00 or float(yArgList[2]) == 0.00:
-									error='ERROR: Either yArgs are nothing or there is a zero in the Yargs and should never be a zero'
-									print error
-									logFile.write(error)
-									interpolingProc.kill()
-								elif len(zArgList) < 3:
-									error='ERROR: zargs are nothing or missing'
-									print error
-									logFile.write(error)
-									interpolingProc.kill()
-								elif len(zArgList) == 3 and len(yArgList) == 3 and yCenter != 0:
-									# Extract values from the temp file
-									zZerosTmp=[]
-									for i,zAbs in enumerate(zArgList):
-										zZerosTmp.append(float(zAbs))
+								logFile.write(error + "\n")
+								interpolingProc.kill()
+							elif len(zArgList) < 3:
+								error='ERROR: zargs are nothing or missing'
+								print error
+								logFile.write(error+ "\n")
+								interpolingProc.kill()
+							elif len(zArgList) == 3 and len(yArgList) == 3 and yCenter != 0:
+								# Extract values from the temp file
+								zZerosTmp=[]
+								for i,zAbs in enumerate(zArgList):
+									zZerosTmp.append(float(zAbs))
 
-									zZeros = []
-									zZeros.append((float(yArgList[0]),zZerosTmp[0]-zZerosTmp[1]))
-									zZeros.append((yCenter,0))
-									zZeros.append((float(yArgList[2]),zZerosTmp[2]-zZerosTmp[1]))
-									logFile.write("zZeros:\t\t\t" + str(zZeros) + "\n")
+								zZeros = []
+								zZeros.append((float(yArgList[0]),zZerosTmp[0]-zZerosTmp[1]))
+								zZeros.append((yCenter,0))
+								zZeros.append((float(yArgList[2]),zZerosTmp[2]-zZerosTmp[1]))
+								logFile.write("zZeros:\t\t\t" + str(zZeros) + "\n")
 
-									# Error:
-									warnProc = None
-									if zZeros[0][1] > ERROR_Z:
-										warningMessage="ERROR: The TOP of the blank is " + str(ERROR_Z) + " inches higher than the middle! Do not continue. This is very bad."
-										handleError(warningMessage)
-									elif zZeros[-1][1] > ERROR_Z:
-										warningMessage="ERROR: The BOTTTOM of the blank is " + str(ERROR_Z)+ " inches higher than the middle! Do not continue. This is very bad."
-										handleError(warningMessage)
-									# Warnings! handleErrors
-									elif zZeros[0][1] > WARNING_Z:
-										warningMessage="WARNING: The TOP of the blank is " + str(WARNING_Z) + " inches higher than the middle!"
-										handleError(warningMessage)
-									elif zZeros[-1][1] > WARNING_Z:
-										warningMessage="WARNING: The BOTTOM of the blank is " + str(WARNING_Z) + " inches higher than the middle!"
-										handleError(warningMessage)
+								# Error:
+								warnProc = None
+								if zZeros[0][1] > ERROR_Z:
+									warningMessage="ERROR: The TOP of the blank is " + str(ERROR_Z) + " inches higher than the middle! Do not continue. This is very bad."
+									handleError(warningMessage)
+								elif zZeros[-1][1] > ERROR_Z:
+									warningMessage="ERROR: The BOTTTOM of the blank is " + str(ERROR_Z)+ " inches higher than the middle! Do not continue. This is very bad."
+									handleError(warningMessage)
+								# Warnings! handleErrors
+								elif zZeros[0][1] > WARNING_Z:
+									warningMessage="WARNING: The TOP of the blank is " + str(WARNING_Z) + " inches higher than the middle!"
+									handleError(warningMessage)
+								elif zZeros[-1][1] > WARNING_Z:
+									warningMessage="WARNING: The BOTTOM of the blank is " + str(WARNING_Z) + " inches higher than the middle!"
+									handleError(warningMessage)
 
-									print "RUNNING"
-									print "ZEROS" + str(zZeros)
-									compiledFile = mainLogic(zZeros, logFile)
-									subprocess.Popen([python,playwave,audioDir + wavSuccess])
-								else:
-									interpolingProc.kill()
-									print "Cannot parse " + argFile
-
-							# Write the done file with the name of the file we are delivering
-							with open(argFile + ".done", 'a') as doneFile:
-								if not compiledFile is None:
-									doneFile.write(compiledFile  + "\n")
-									doneFile.write(os.path.splitext(os.path.basename(compiledFile))[0])
-							# Success message
-							if not compiledFile is None:
-								handleError("Successfully compiled gcode. The largest Z differential is " + str("{0:.3f}".format(max(zZeros[0][1], zZeros[-1][1], zZeros[0][1], zZeros[-1][1]))))
-
-						elif multiType == "FRAGMENTED":
-							fragments = []
-							realZindex = None
-							xJigOffset = None
-							yJigOffset = None
-							jigs = [] # Represents x and y offsets of a jig
-							jigFragments = []
-							fragmentsDir = file.readline().strip()
-							compiledFile = None
-
-							for line in file:
-								print(line)
-								line_clean = line.strip().split(' ')
-								if line_clean[0] == "RealIndex":
-									if realZindex is not None:
-										handleError("FATAL ERROR FATAL ERROR: More than one Real Index presented.", True)
-									realZindex = float(line_clean[1])
-								elif line_clean[0].endswith(".gcode"):
-									fragments.append((line_clean[0], float(line_clean[1])))
-								elif line_clean[0] == "xJigOffset":
-									# Once we hit xJigOffset again, we should save our .gcode offsets
-									if len(jigs) > 0:
-										jigFragments.append((len(jigs)-1,fragments))
-										fragments=[]
-									xJigOffset = float(line_clean[1])
-								elif line_clean[0] == "yJigOffset":
-									yJigOffset = float(line_clean[1])
-									jigs.append((xJigOffset, yJigOffset))
-
-							# Store the final fragments
-							jigFragments.append((len(jigs)-1, fragments))
-
-
-							########### Validation ################
-							if DEBUG:
-								print("FragmentsDir: " + fragmentsDir)
-								print("Fragments: ")
-								print(fragments)
-							if any(0 in fragment for fragment in fragments) or realZindex is 0:
-								handleError("FATAL ERROR FATAL ERROR: fragments or real z index is equal to ZERO! ", True)
-							elif xJigOffset is None or yJigOffset is None:
-								handleError("FATAL ERROR FATAL ERROR: Couldn't get jig offsets from arguments file!", True)
-							elif len(jigs) != len(jigFragments):
-								handleError("FATAL ERROR FATAL ERROR: Number of jigs doesn't match jig fragments", True)
-								continue
-							elif realZindex is None:
-								handleError("FATAL ERROR FATAL ERROR: Couldn't get real z index from arguments file!", True)
-							elif fragmentsDir is None:
-								handleError("FATAL ERROR FATAL ERROR: Couldn't parse fragments dir from arguments file!", True)
-							elif not os.path.isdir(fragmentsDir):
-								handleError("FATAL ERROR FATAL ERROR: The given fragments dir doesn't exist: " + fragmentsDir, True)
-							elif not fragments:
-								handleError("FATAL ERROR FATAL ERROR: Couldn't parse fragments values from agruments file", True)
+								print "RUNNING"
+								print "ZEROS" + str(zZeros)
+								compiledFile = mainLogic(zZeros)
+								subprocess.Popen([python,playwave,audioDir + wavSuccess])
 							else:
-								compiledFile = combineFragments(realZindex, fragmentsDir, jigFragments, jigs)
+								interpolingProc.kill()
+								print "Cannot parse " + argFile
 
-							# Compare every value with the real index
-							largestZdiff = 0.00
-							largestZdiffFile = ""
-							for fragments in jigFragments:
-								for fragment in fragments[1]:
-									zDiff = abs(realZindex - fragment[1])
-									# Store the largest value
-									if zDiff > largestZdiff:
-										largestZdiff = zDiff
-										largestZdiffFile = fragment[0]
-
-							if largestZdiff > FATAL_Z:
-								warningMessage="FATAL ERROR FATAL ERROR: fragment: "+ largestZdiffFile + " has a z differential larger than " + str(FATAL_Z) + " ! Do not continue. This is very bad."
-								handleError(warningMessage, True)
-							elif largestZdiff> ERROR_Z:
-								warningMessage="ERROR ERROR: fragment: "+ largestZdiffFile + " has a z differential larger than " + str(ERROR_Z) + " !"
-								handleError(warningMessage)
-							elif largestZdiff > WARNING_Z:
-								warningMessage="WARNING WARNING: fragment: "+ largestZdiffFile + " has a z differential larger than " + str(WARNING_Z) + " !"
-								handleError(warningMessage)
-
-							# Write the done file with the name of the file we are delivering
-							with open(argFile + ".done", 'a') as doneFile:
-								if not compiledFile is None:
-									doneFile.write(compiledFile + "\n")
-									# Base name
-									doneFile.write(os.path.splitext(os.path.basename(compiledFile))[0])
-									subprocess.Popen([python,playwave,audioDir + wavSuccess])
-
-							# Success message
+						# Write the done file with the name of the file we are delivering
+						with open(argFile + ".done", 'a') as doneFile:
 							if not compiledFile is None:
-								handleError("Successfully compiled gcode. The largest Z differential is " + str("{0:.3f}".format(largestZdiff)))
-						
-						elif multiType == "DOUBLEJIG_SINGLE":
-							# X and Y offsets for double jig
-							doubleJigXoff = float(file.readline())
-							doubleJigYoff = float(file.readline())
+								doneFile.write(compiledFile  + "\n")
+								doneFile.write(os.path.splitext(os.path.basename(compiledFile))[0])
+						# Success message
+						if not compiledFile is None:
+							handleError("Successfully compiled gcode. The largest Z differential is " + str("{0:.3f}".format(max(zZeros[0][1], zZeros[-1][1], zZeros[0][1], zZeros[-1][1]))))
 
-							realZindex = float(file.readline())
-							realZindexLog = "Real Z Index:\t\t\t" + str(realZindex)
-							print realZindexLog
-							logFile.write(realZindexLog)
-							secondZindex = float(file.readline())
-							secondZindexLog = "Second Z Index:\t\t\t" + str(secondZindex)
-							print secondZindexLog
-							logFile.write(secondZindexLog)
-							targetFile = os.path.expanduser(file.readline()).strip() # string
-							# Replace for my vm environment to work
-							targetFile = targetFile.replace("Z:\\\\","\\\\vmware-host\\")
-							targetFile = targetFile.replace("z:\\\\","\\\\vmware-host\\")
-							logFile.write("File:\t\t\t" + targetFile + "\n")
+					elif multiType == "FRAGMENTED":
+						fragments = []
+						realZindex = None
+						xJigOffset = None
+						yJigOffset = None
+						jigs = [] # Represents x and y offsets of a jig
+						jigFragments = []
+						fragmentsDir = file.readline().strip()
+						compiledFile = None
 
-							compiledFile = doubleJigSimpleZ(doubleJigXoff, doubleJigYoff, realZindex, secondZindex, targetFile)
+						for line in file:
+							print(line)
+							logFile.write(line + '\n')
+							line_clean = line.strip().split(' ')
+							if line_clean[0] == "RealIndex":
+								if realZindex is not None:
+									handleError("FATAL ERROR FATAL ERROR: More than one Real Index presented.", True)
+								realZindex = float(line_clean[1])
+							elif line_clean[0].endswith(".gcode"):
+								fragments.append((line_clean[0], float(line_clean[1])))
+							elif line_clean[0] == "xJigOffset":
+								# Once we hit xJigOffset again, we should save our .gcode offsets
+								if len(jigs) > 0:
+									jigFragments.append((len(jigs)-1,fragments))
+									fragments=[]
+								xJigOffset = float(line_clean[1])
+							elif line_clean[0] == "yJigOffset":
+								yJigOffset = float(line_clean[1])
+								jigs.append((xJigOffset, yJigOffset))
 
-							with open(argFile + ".done", 'a') as doneFile:
-								if not compiledFile is None:
-									doneFile.write(compiledFile + "\n")
-									# Base name
-									doneFile.write(os.path.splitext(os.path.basename(compiledFile))[0])
-						else:	
-							error = "ERROR: Unrecognized multi type: " + multiType
-							print error
-							# Write the done file with the name of the file we are delivering
-							with open(argFile + ".done", 'a') as doneFile:
-								if not compiledFile is None:
-									doneFile.write(error + "\n")
-									# Base name
-									doneFile.write(os.path.splitext(os.path.basename(compiledFile))[0])
-					# Remove the temp file
-					interpolingProc.kill()
-					# os.remove(argFile)
-					# Touch temp file to temp location so we don't modify the real one
+						# Store the final fragments
+						jigFragments.append((len(jigs)-1, fragments))
+
+
+						########### Validation ################
+						if DEBUG:
+							print("FragmentsDir: " + fragmentsDir)
+							print("Fragments: ")
+							print(fragments)
+						if any(0 in fragment for fragment in fragments) or realZindex is 0:
+							handleError("FATAL ERROR FATAL ERROR: fragments or real z index is equal to ZERO! ", True)
+						elif xJigOffset is None or yJigOffset is None:
+							handleError("FATAL ERROR FATAL ERROR: Couldn't get jig offsets from arguments file!", True)
+						elif len(jigs) != len(jigFragments):
+							handleError("FATAL ERROR FATAL ERROR: Number of jigs doesn't match jig fragments", True)
+							continue
+						elif realZindex is None:
+							handleError("FATAL ERROR FATAL ERROR: Couldn't get real z index from arguments file!", True)
+						elif fragmentsDir is None:
+							handleError("FATAL ERROR FATAL ERROR: Couldn't parse fragments dir from arguments file!", True)
+						elif not os.path.isdir(fragmentsDir):
+							handleError("FATAL ERROR FATAL ERROR: The given fragments dir doesn't exist: " + fragmentsDir, True)
+						elif not fragments:
+							handleError("FATAL ERROR FATAL ERROR: Couldn't parse fragments values from agruments file", True)
+						else:
+							compiledFile = combineFragments(realZindex, fragmentsDir, jigFragments, jigs)
+
+						# Compare every value with the real index
+						largestZdiff = 0.00
+						largestZdiffFile = ""
+						for fragments in jigFragments:
+							for fragment in fragments[1]:
+								zDiff = abs(realZindex - fragment[1])
+								# Store the largest value
+								if zDiff > largestZdiff:
+									largestZdiff = zDiff
+									largestZdiffFile = fragment[0]
+
+						if largestZdiff > FATAL_Z:
+							warningMessage="FATAL ERROR FATAL ERROR: fragment: "+ largestZdiffFile + " has a z differential larger than " + str(FATAL_Z) + " ! Do not continue. This is very bad."
+							handleError(warningMessage, True)
+						elif largestZdiff> ERROR_Z:
+							warningMessage="ERROR ERROR: fragment: "+ largestZdiffFile + " has a z differential larger than " + str(ERROR_Z) + " !"
+							handleError(warningMessage)
+						elif largestZdiff > WARNING_Z:
+							warningMessage="WARNING WARNING: fragment: "+ largestZdiffFile + " has a z differential larger than " + str(WARNING_Z) + " !"
+							handleError(warningMessage)
+
+						# Write the done file with the name of the file we are delivering
+						with open(argFile + ".done", 'a') as doneFile:
+							if not compiledFile is None:
+								doneFile.write(compiledFile + "\n")
+								# Base name
+								doneFile.write(os.path.splitext(os.path.basename(compiledFile))[0])
+								subprocess.Popen([python,playwave,audioDir + wavSuccess])
+
+						# Success message
+						if not compiledFile is None:
+							handleError("Successfully compiled gcode. The largest Z differential is " + str("{0:.3f}".format(largestZdiff)))
+					
+					elif multiType == "DOUBLEJIG_SINGLE":
+						# X and Y offsets for double jig
+						doubleJigXoff = float(file.readline())
+						doubleJigYoff = float(file.readline())
+
+						realZindex = float(file.readline())
+						realZindexLog = "Real Z Index:\t\t\t" + str(realZindex)
+						print realZindexLog
+						logFile.write(realZindexLog + '\n')
+						secondZindex = float(file.readline())
+						secondZindexLog = "Second Z Index:\t\t\t" + str(secondZindex)
+						print secondZindexLog
+						logFile.write(secondZindexLog + '\n')
+						targetFile = os.path.expanduser(file.readline()).strip() # string
+						# Replace for my vm environment to work
+						targetFile = targetFile.replace("Z:\\\\","\\\\vmware-host\\")
+						targetFile = targetFile.replace("z:\\\\","\\\\vmware-host\\")
+						logFile.write("File:\t\t\t" + targetFile + "\n")
+
+						compiledFile = doubleJigSimpleZ(doubleJigXoff, doubleJigYoff, realZindex, secondZindex, targetFile)
+
+						with open(argFile + ".done", 'a') as doneFile:
+							if not compiledFile is None:
+								doneFile.write(compiledFile + "\n")
+								# Base name
+								doneFile.write(os.path.splitext(os.path.basename(compiledFile))[0])
+
+						# Success message
+						if not compiledFile is None:
+							handleError("Successfully compiled gcode. The Z differential is " + str("{0:.3f}".format(realZindex - secondZindex)))
+					else:	
+						error = "ERROR: Unrecognized multi type: " + multiType
+						print error
+						# Write the done file with the name of the file we are delivering
+						with open(argFile + ".done", 'a') as doneFile:
+							if not compiledFile is None:
+								doneFile.write(error + "\n")
+								# Base name
+								doneFile.write(os.path.splitext(os.path.basename(compiledFile))[0])
+				# Remove the temp file
+				interpolingProc.kill()
+				logFile.flush()
+				# os.remove(argFile)
+				# Touch temp file to temp location so we don't modify the real one
 
 		except OSError as e:
 			print e
@@ -678,3 +683,4 @@ try:
 		time.sleep(1)
 except KeyboardInterrupt:
 	print('Exitting...')
+	logFile.close()
