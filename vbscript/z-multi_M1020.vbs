@@ -7,16 +7,20 @@ Dim DEBUG
 DEBUG = False
 Set objFSO=CreateObject("Scripting.FileSystemObject")
 
+' Double jig variable
+Dim doubleJig As Boolean
+doubleJig = GetUserLED(1234)
+
 ' Define the square jigs that we have
 Dim numOfJigs As Integer
 Static jigs (2,2) As Double
 numOfJigs = 1
 jigs(0,0) = 0
 jigs(0,1) = 0
-If GetOEMDRO(2100) = 1 Then
+If doubleJig Then
   numOfJigs = 2
-  jigs(1,0) = 0.5
-  jigs(1,1) = 14
+  jigs(1,0) = -0.06
+  jigs(1,1) = 15.73
 End If
 
 ' Check if we are in my Virtual Machine, if so DEBUG
@@ -29,6 +33,9 @@ Call SetOEMDRO (2042, 1)
 
 ' Set variable to default 0 saying this We want z routine validation
 Call SetOEMDRO (2043, 0)
+
+' Reset 2050 z offset variable to 0
+Call SetOEMDRO (2050, 0.00)
 
 ' Write to a file that python will monitor, and execute when created
 Dim outFilePath As String

@@ -1,17 +1,27 @@
 ' This is the M1019 Script to execute single auto z zero
 ' I had to wrap this in a script due to double square jig
 Dim doubleJigXoff, doubleJigYoff
-doubleJigXoff = 0.5
-doubleJigYoff = 14.0
+doubleJigXoff = -0.06
+doubleJigYoff = 15.73
 Dim DEBUG
 DEBUG = False
+Set objFSO=CreateObject("Scripting.FileSystemObject")
+
+' Check if we are in my Virtual Machine, if so DEBUG
+If objFSO.FolderExists("Z:\grantspence On My Mac") Then
+  DEBUG = True
+End if
+
+' Double jig variable
+Dim doubleJig As Boolean
+doubleJig = GetUserLED(1234)
 
 Dim outFilePath As String
 Dim doneFilePath As String
 Dim timeString As String
 timeString = Format(Date,"yyyymmdd") & Format(Time,"HHMMSS")
 outFilePath="c:\Mach3\argFiles\z-multi." & timeString & ".txt"
-Set objFSO=CreateObject("Scripting.FileSystemObject")
+
 doneFilePath=outFilePath & ".done"
 Dim tmpFileId As String
 tmpFileId = "_TEMPORARY_COPY.gcode"
@@ -24,7 +34,7 @@ Dim gcodeFileMainDir As String
 gcodeFileMainDir = GetloadedGCodeDir()
 gcodeFileName = GetloadedGCodeFileName()
 gcodeFilePathFull = gcodeFileMainDir & gcodeFileName
-if GetOEMDRO(2100) = 1 Then
+if doubleJig Then
   If Len(gcodeFilePathFull) = 0 Then
     Code "(ERROR: Load GCode file first, your trying to do a double jig)"
     Exit Sub
@@ -43,6 +53,9 @@ Call SetOEMDRO (2042, 0)
 ' Set variable to 0 saying WE WANT VALIDATION
 Call SetOEMDRO (2043, 1)
 
+' Reset 2050 z offset variable to 0
+Call SetOEMDRO (2050, 0.00)
+
 Dim currentX As Double, currentY As Double
 currentX = GetOEMDRO(178)
 currentY = GetOEMDRO(179)
@@ -52,7 +65,7 @@ Dim realZindex As Double
 realZindex = runZRoutine(currentX, currentY, true, false)
 
 ' Now determine if we want to execute same thing on additional square jig
-if GetOEMDRO(2100) = 1 Then
+if doubleJig Then
   ' Absolute Positioning
   Code "G90"
 
