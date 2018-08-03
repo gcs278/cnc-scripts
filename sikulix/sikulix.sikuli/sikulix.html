@@ -1,0 +1,169 @@
+
+<html>
+   <head>
+      <style type="text/css">
+         .sikuli-code {
+            font-size: 20px;
+            font-family: "Osaka-mono", Monospace;
+            line-height: 1.5em;
+            display:table-cell;
+            white-space: pre-wrap;       /* css-3 */
+            white-space: -moz-pre-wrap !important;  /* Mozilla, since 1999 */
+            white-space: -pre-wrap;      /* Opera 4-6 */
+            white-space: -o-pre-wrap;    /* Opera 7 */
+            word-wrap: break-word;       /* Internet Explorer 5.5+ */
+            width: 99%;   /* remove horizontal scroll-bar when viewing in IE7 */
+         }
+         .sikuli-code img {
+            vertical-align: middle;
+            margin: 2px;
+            border: 1px solid #ccc;
+            padding: 2px;
+            -moz-border-radius: 5px;
+            -webkit-border-radius: 5px;
+            -moz-box-shadow: 1px 1px 1px gray;
+            -webkit-box-shadow: 1px 1px 2px gray;
+         }
+         .kw {
+            color: blue;
+         }
+         .skw {
+            color: rgb(63, 127, 127);
+         }
+
+         .str {
+            color: rgb(128, 0, 0);
+         }
+
+         .dig {
+            color: rgb(128, 64, 0);
+         }
+
+         .cmt {
+            color: rgb(200, 0, 200);
+         }
+
+         h2 {
+            display: inline;
+            font-weight: normal;
+         }
+
+         .info {
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+            margin-bottom: 20px;
+            display: none;
+         }
+
+         a {
+            color: #9D2900;
+         }
+
+         body {
+            font-family: "Trebuchet MS", Arial, Sans-Serif;
+         }
+
+      </style>
+   </head>
+<body>
+<div class="info">
+<h2>sikulix.sikuli</h2> <a href="sikulix.zip">(Download this script)</a>
+</div>
+<pre class="sikuli-code">
+items = (<span class="str">"Start Depth"</span>,<span class="str">"Change bits to 90 Degrees"</span>, <span class="str">"Change bits to 60 Degrees"</span>, <span class="str">"Save all toolpaths"</span>)
+task = select(<span class="str">"Select what task you want to perform"</span>, options = items)
+
+
+<span class="kw">if</span> task == items[<span class="dig">0</span>]:
+    sDepth = <span class="skw">input</span>(<span class="str">"Input a start depth:"</span>)
+
+<span class="cmt"># Function to click each toolpath and modify it</span>
+<span class="kw">def</span> modifyToolpaths(top):
+    <span class="kw">if</span> <span class="kw">not</span> exists(Pattern(<img src="1531967477473.png" />).similar(<span class="dig">0.97</span>).targetOffset(<span class="dig">23</span>,-<span class="dig">1</span>)):
+        <span class="kw">return</span>
+    <span class="kw">for</span> x <span class="kw">in</span> findAll(Pattern(<img src="1531967477473.png" />).similar(<span class="dig">0.97</span>).targetOffset(<span class="dig">23</span>,-<span class="dig">1</span>)):
+        <span class="skw">doubleClick</span>(x)
+        <span class="kw">if</span> task == items[<span class="dig">0</span>]:
+            <span class="skw">click</span>(Pattern(<img src="1531966919660.png" />).targetOffset(<span class="dig">75</span>,-<span class="dig">2</span>))
+            <span class="skw">type</span>(<span class="str">"a"</span>,KEY_CTRL)
+            <span class="skw">type</span>(sDepth)
+        <span class="kw">elif</span> task == items[<span class="dig">1</span>]:
+            <span class="skw">click</span>(Pattern(<img src="1532050408082.png" />).targetOffset(<span class="dig">99</span>,<span class="dig">17</span>))
+            <span class="skw">click</span>(<img src="1532050450743.png" />)
+            <span class="skw">click</span>(<img src="1532050564687.png" />)
+        <span class="kw">elif</span> task == items[<span class="dig">2</span>]:
+            <span class="skw">click</span>(Pattern(<img src="1532050408082.png" />).targetOffset(<span class="dig">99</span>,<span class="dig">17</span>))
+            <span class="skw">click</span>(<img src="1532050609212.png" />)
+            <span class="skw">click</span>(<img src="1532050564687.png" />)
+        <span class="skw">click</span>(<img src="1531967356502.png" />)
+        <span class="kw">if</span>(exists(<img src="1532044569814.png" />)):
+            <span class="skw">click</span>(Pattern(<img src="1532044581737.png" />).similar(<span class="dig">0.71</span>))
+        <span class="kw">if</span> top:
+            <span class="skw">click</span>(Pattern(<img src="1532048577277.png" />).targetOffset(<span class="dig">17</span>,<span class="dig">39</span>))
+        <span class="kw">else</span>:
+            <span class="skw">click</span>(Pattern(<img src="1532048853154.png" />).targetOffset(<span class="dig">6</span>,-<span class="dig">32</span>))
+        hover(x)
+        mouseMove(-<span class="dig">33</span>,-<span class="dig">3</span>)
+        mouseDown(Button.LEFT)
+        mouseUp(Button.LEFT)
+
+<span class="kw">if</span>(exists(<img src="1531967086580.png" />)):
+        <span class="skw">click</span>(<img src="1531967095102.png" />)
+
+<span class="kw">if</span>(exists(<img src="1532044569814.png" />)):
+    <span class="skw">click</span>(Pattern(<img src="1532044581737.png" />).similar(<span class="dig">0.71</span>))
+
+<span class="kw">if</span>(exists(<img src="1532139576641.png" />)):
+    <span class="skw">click</span>(<img src="1532139584617.png" />)
+
+<span class="cmt"># Go to the top</span>
+<span class="skw">click</span>(Pattern(<img src="1532048577277.png" />).targetOffset(<span class="dig">17</span>,<span class="dig">39</span>))
+
+<span class="kw">if</span> task != items[<span class="dig">3</span>]:
+    modifyToolpaths(True)
+
+    <span class="cmt"># Go to the bottom</span>
+    <span class="skw">click</span>(Pattern(<img src="1532048853154.png" />).targetOffset(<span class="dig">6</span>,-<span class="dig">32</span>))
+
+    modifyToolpaths(False)
+<span class="kw">elif</span> task == items[<span class="dig">3</span>]:
+    <span class="skw">click</span>(<img src="1532051295960.png" />)
+    hover(Pattern(<img src="1532048577277.png" />).targetOffset(<span class="dig">17</span>,<span class="dig">39</span>))
+    mouseDown(Button.LEFT)
+    <span class="skw">sleep</span>(<span class="dig">2</span>)
+    mouseUp(Button.LEFT)
+
+    <span class="kw">if</span> exists(Pattern(<img src="1532051379042.png" />).exact()):
+        <span class="skw">click</span>(Pattern(<img src="1532051388422.png" />).targetOffset(-<span class="dig">93</span>,-<span class="dig">2</span>))
+    first=True
+    loop=True
+    <span class="kw">while</span>(loop):
+        <span class="kw">if</span> exists(Pattern(<img src="1531967477473.png" />).similar(<span class="dig">0.97</span>).targetOffset(<span class="dig">23</span>,-<span class="dig">1</span>)):
+            <span class="kw">for</span> x <span class="kw">in</span> findAll(Pattern(<img src="1531967477473.png" />).similar(<span class="dig">0.97</span>).targetOffset(<span class="dig">23</span>,-<span class="dig">1</span>)):
+                <span class="skw">click</span>(x)
+                <span class="skw">click</span>(<img src="1532139888228.png" />)
+                <span class="kw">if</span> first:
+                   <span class="skw">popup</span>(<span class="str">"Please select the folder you'd like these to save to...then click ok"</span>)
+                   first=False
+                <span class="skw">click</span>(<img src="1532565073660.png" />)
+                <span class="kw">if</span> exists(<img src="1532565230934.png" />):
+                        <span class="skw">click</span>(<img src="1532565250002.png" />)
+                <span class="cmt"># Uncheck the check box</span>
+                hover(x)
+                mouseMove(-<span class="dig">33</span>,-<span class="dig">3</span>)
+                mouseDown(Button.LEFT)
+                mouseUp(Button.LEFT)
+        <span class="kw">if</span> exists(Pattern(<img src="1532568951939.png" />).exact()):
+            loop=False
+            <span class="kw">break</span>
+
+        <span class="cmt"># Click 7 times and look for more</span>
+        <span class="skw">click</span>(Pattern(<img src="1532564767758.png" />).targetOffset(<span class="dig">5</span>,-<span class="dig">25</span>))
+        <span class="skw">click</span>(Pattern(<img src="1532564767758.png" />).targetOffset(<span class="dig">5</span>,-<span class="dig">25</span>))
+        <span class="skw">click</span>(Pattern(<img src="1532564767758.png" />).targetOffset(<span class="dig">5</span>,-<span class="dig">25</span>))
+        <span class="skw">click</span>(Pattern(<img src="1532564767758.png" />).targetOffset(<span class="dig">5</span>,-<span class="dig">25</span>))
+        <span class="skw">click</span>(Pattern(<img src="1532564767758.png" />).targetOffset(<span class="dig">5</span>,-<span class="dig">25</span>))
+        <span class="skw">click</span>(Pattern(<img src="1532564767758.png" />).targetOffset(<span class="dig">5</span>,-<span class="dig">25</span>))
+</pre>
+</body>
+</html>
