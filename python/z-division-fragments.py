@@ -53,7 +53,7 @@ ttsWatson = TtsWatson('990e8a8e-0727-4d98-93a8-921a27d5202d', 'sdcoWYFtMXEA', 'e
 if MAC:
 	rootdir = '/Users/grantspence/Google Drive/GS_Custom_Woodworking'
 	tmpdir = '/tmp/gcode_tmp/'
-	targetFile=rootdir+"/Square_Signs/She_is_clothed_copy.gcode"
+	targetFile=rootdir+"/GCode/Square_Signs/She_is_clothed_copy.gcode"
 	argFileDir="/tmp/"
 	argFileGlob=argFileDir + "z-multi*.txt"
 	audioDir = rootdir + "/CNC_Data/audio_clips/"

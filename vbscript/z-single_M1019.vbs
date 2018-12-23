@@ -151,10 +151,10 @@ Function runZRoutine(zX As Double, zY As Double, realIndex As Boolean, skipVerif
     Call SetOEMDRO (2043, 0)
   End If
 
-  Speak("Moving to new z index")
+  'Speak("Moving to new z index")
   Code "G0X " & zX & "Y" & zY
   While IsMoving()      
-    Sleep 1000
+    Sleep 100
   Wend
   Dim Timer
 

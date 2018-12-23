@@ -14,7 +14,7 @@ import re, math
 import shutil
 
 # Global Variables
-rootdir = 'C:\\Users\\Shop\\Google Drive\\GS_Custom_Woodworking'
+rootdir = 'C:\\Users\\Grant\\Google Drive\\GS_Custom_Woodworking'
 tmpdir = 'C:\\tmp\\'
 DEBUG=False
 MAC=False
@@ -258,6 +258,10 @@ if MAC:
 	logFilePath = log_dir + "/y-split-logs-MACDEBUG.log"	
 else:
 	logFilePath = log_dir + "\\y-split-logs.log"	
+
+if len(sys.argv) < 2:
+	print "ERROR: You must pust at least one argument"
+	sys.exit(1)	
 
 # First check arguments
 for gcodeFile in sys.argv[1:]:

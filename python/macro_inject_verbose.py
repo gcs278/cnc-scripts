@@ -5,10 +5,11 @@ import os, time, fileinput
 from verboseGcode import makeGcodeVerbose
 from shutil import copyfile
 
-rootdir = '/Users/grantspence/Google Drive/GS_Custom_Woodworking'
+rootdir = 'C:\\Users\\Grant\\Google Drive\\GS_Custom_Woodworking'
+#rootdir = '/Users/grantspence/Google Drive/GS_Custom_Woodworking'
 #rootdir = '\\\\vmware-host\\Shared Folders\\grantspence On My Mac\\Google Drive\\GS_Custom_Woodworking'
-#archiveDir = rootdir + '\\GCode_Archive'
-archiveDir = rootdir + '/GCode_Archive'
+archiveDir = rootdir + '\\GCode_Archive'
+#archiveDir = rootdir + '/GCode_Archive'
 
 fileExtention=".gcode" 
 
@@ -33,7 +34,8 @@ if len(sys.argv) == 2 and sys.argv[1] == '--revert':
 
 	print("Reverted " + str(fileCount) +  " files")
 else:
-	timestr = time.strftime("%I:%M %PM on %B %d")
+	#timestr = time.strftime("%I:%M %PM on %B %d")
+	timestr = time.strftime("%I:%M %p on %B %d")
 	print("Running configuration...it's "+timestr)
 	fileCount=0
 	for subdir, dirs, files in os.walk(rootdir):
@@ -100,7 +102,8 @@ else:
 							break
 						line_count += 1
 				if not gcodeAlreadyConfigured:
-					print "Making " + file + " verbose"
-					makeGcodeVerbose(filePath)
+					print "Skipping making " + file + " verbose..."
+					#print "Making " + file + " verbose"
+					#makeGcodeVerbose(filePath)
 
 	print("Verified: " + str(fileCount) + " files")

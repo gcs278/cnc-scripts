@@ -12,10 +12,11 @@ def natural_sort(l):
 	alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ] 
 	return sorted(l, key = alphanum_key)
 
-rootdir = '/Users/grantspence/Google Drive/GS_Custom_Woodworking'
+rootdir = 'C:\\Users\\Grant\\Google Drive\\GS_Custom_Woodworking'
+#rootdir = '/Users/grantspence/Google Drive/GS_Custom_Woodworking'
 #rootdir = '\\\\vmware-host\\Shared Folders\\grantspence On My Mac\\Google Drive\\GS_Custom_Woodworking'
-#archiveDir = rootdir + '\\GCode_Archive'
-archiveDir = rootdir + '/GCode_Archive'
+archiveDir = rootdir + '\\GCode_Archive'
+#archiveDir = rootdir + '/GCode_Archive'
 DEBUG=False
 
 fileExtention=".gcode" 
