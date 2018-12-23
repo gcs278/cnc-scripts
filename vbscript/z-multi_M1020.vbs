@@ -143,13 +143,29 @@ If objFSO.FolderExists(fragmentDir) Then
     Dim I as Integer
     For I = 0 To (numOfJigs-1)
       Dim firstJig As Boolean
-      firstJig = true
-      if I > 0 Then
-        firstJig = false
-      End If
+      firstJig = True
+
+      ' First navigate to our default offset
       Dim xJigOffset As Double, yJigOffset As Double
       xJigOffset = jigs(I,0)
       yJigOffset = jigs(I,1)
+      if I > 0 Then
+        firstJig = False
+        ' Now Selective second x and y
+        Code "G0X" & xJigOffset & "Y" & yJigOffset
+        While IsMoving()      
+          Sleep 100
+        Wend
+        Begin Dialog ButtonJig 16,32,150,96,"ZERO"
+          Text 10,12,130,60, "Zero X and Y for the second jig and then hit okay." 
+          OKButton 30,70,40,14
+          'CancelButton 80, 70,40,14
+        End Dialog
+        Dim Dlg4 As ButtonJig
+        Dialog Dlg4
+        xJigOffset = GetOEMDRO(800)
+        yJigOffset = GetOEMDRO(801)
+      End If
 
       ' First get the real Z in the middle
       Dim zRealIndex As Double
@@ -188,7 +204,7 @@ If objFSO.FolderExists(fragmentDir) Then
           End Dialog
           Dim Dlg3 As ButtonSampleTest1
           Dialog Dlg3
-          Exit Sub
+          'Exit Sub
         ElseIf zX = 0 Then
           zX = CDbl(infoLine) + xJigOffset
         Else
@@ -231,6 +247,8 @@ Else
   Dim yArgs As String
   yArgs = ""
 
+  Dim notFirst As Boolean
+  notFirst = False
   Dim y
   For Each y In yZeros
     Dim realIndex As Boolean
@@ -243,8 +261,9 @@ Else
     midPoint = width/2
     Dim zOffset As Double
     yArgs = yArgs & y & " "
-    zOffset = runZRoutine(midPoint, y, realIndex, False)
+    zOffset = runZRoutine(midPoint, y, realIndex, notFirst)
     zArgs = zArgs & zOffset & " "
+    notFirst = True
   Next
 
   ' Write the arguments to file
@@ -318,17 +337,17 @@ Function runZRoutine(zX As Double, zY As Double, realIndex As Boolean, skipVerif
 
   ' If  we wanna skip the "tap" from z routine
   If skipVerify Then
-    ' Set variable to 0 saying this We DON'T want z routine validation
+    ' Set variable to 1 saying this We DON'T want z routine validation
     Call SetOEMDRO (2043, 1)
   Else
     ' Set variable to 0 saying this We WANT z routine validation
     Call SetOEMDRO (2043, 0)
   End If
 
-  Speak("Moving to new z index")
+  'Speak("Moving to new z index")
   Code "G0X " & zX & "Y" & zY
   While IsMoving()      
-    Sleep 1000
+    Sleep 100
   Wend
   Dim Timer
 
