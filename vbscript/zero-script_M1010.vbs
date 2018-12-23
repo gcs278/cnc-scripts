@@ -157,7 +157,7 @@ End If
    While IsMoving()      
       Sleep 100
    Wend
-   Sleep 500      
+   Sleep 100      
    Code "G31Z" & New_Z
    While IsMoving()      
       Sleep 100
@@ -170,10 +170,10 @@ End If
 
    New_Z = GetVar(2002)
    Old_Z = New_Z
-   Code "G1 Z" & New_Z
-   While IsMoving ()
-      Sleep 100
-   Wend
+   'Code "G1 Z" & New_Z
+   'While IsMoving ()
+   '   Sleep 100
+   'Wend
 
    ' Only store if we have varaible setZIndex to store
    If setZindex = 1 Then
@@ -182,7 +182,7 @@ End If
    Dim zAbsolute
    zAbsolute = GetOEMDRO(85)
    Call SetOEMDRO (2036,zAbsolute)
-   sleep 250
+   sleep 100
    Code "G0"
    While IsMoving()      
       Sleep 100
