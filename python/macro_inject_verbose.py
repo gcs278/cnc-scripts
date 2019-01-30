@@ -5,11 +5,11 @@ import os, time, fileinput
 from verboseGcode import makeGcodeVerbose
 from shutil import copyfile
 
-rootdir = 'C:\\Users\\Grant\\Google Drive\\GS_Custom_Woodworking'
-#rootdir = '/Users/grantspence/Google Drive/GS_Custom_Woodworking'
+#rootdir = 'C:\\Users\\Grant\\Google Drive\\GS_Custom_Woodworking'
+rootdir = '/Users/grantspence/Google Drive/GS_Custom_Woodworking'
 #rootdir = '\\\\vmware-host\\Shared Folders\\grantspence On My Mac\\Google Drive\\GS_Custom_Woodworking'
-archiveDir = rootdir + '\\GCode_Archive'
-#archiveDir = rootdir + '/GCode_Archive'
+#archiveDir = rootdir + '\\GCode_Archive'
+archiveDir = rootdir + '/GCode_Archive'
 
 fileExtention=".gcode" 
 
@@ -56,9 +56,9 @@ else:
 
 				backupFile = archiveDir + "/" + file + ".bak"
 				timestr = time.strftime("%Y-%m")
-				if not os.path.isfile(backupFile):
-					print("Backing up " + file)
-					copyfile(filePath,backupFile)
+				#if not os.path.isfile(backupFile):
+					#print("Backing up " + file)
+					#copyfile(filePath,backupFile)
 
 				# Count number of lines
 				with open(filePath,"r") as f:
@@ -102,8 +102,8 @@ else:
 							break
 						line_count += 1
 				if not gcodeAlreadyConfigured:
-					print "Skipping making " + file + " verbose..."
+					#print "Skipping making " + file + " verbose..."
 					#print "Making " + file + " verbose"
-					#makeGcodeVerbose(filePath)
+					makeGcodeVerbose(filePath)
 
 	print("Verified: " + str(fileCount) + " files")

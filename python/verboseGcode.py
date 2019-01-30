@@ -259,18 +259,20 @@ if MAC:
 else:
 	logFilePath = log_dir + "\\y-split-logs.log"	
 
-if len(sys.argv) < 2:
-	print "ERROR: You must pust at least one argument"
-	sys.exit(1)	
+if __name__ == "__main__":
+   # stuff only to run when not called via 'import' here
+	if len(sys.argv) < 2:
+		print "ERROR: You must pust at least one argument"
+		sys.exit(1)	
 
-# First check arguments
-for gcodeFile in sys.argv[1:]:
-	if not os.path.exists(gcodeFile):
-		print "ERROR: Argument " + gcodeFile + " does not exist"
-		sys.exit(1)
-	elif not gcodeFile.endswith('.gcode'):
-		print "ERROR: Argument " + gcodeFile + " doesn't have extension .gcode"
-		sys.exit(1)
+	# First check arguments
+	for gcodeFile in sys.argv[1:]:
+		if not os.path.exists(gcodeFile):
+			print "ERROR: Argument " + gcodeFile + " does not exist"
+			sys.exit(1)
+		elif not gcodeFile.endswith('.gcode'):
+			print "ERROR: Argument " + gcodeFile + " doesn't have extension .gcode"
+			sys.exit(1)
 
-for gcodeFile in sys.argv[1:]:
-	makeGcodeVerbose(gcodeFile)
+	for gcodeFile in sys.argv[1:]:
+		makeGcodeVerbose(gcodeFile)

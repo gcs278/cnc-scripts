@@ -1,0 +1,39 @@
+Dim bottomLimitJog, bottomLimitGcode As Double
+bottomLimitJog = -2.8
+bottomLimitGcode = -3.5
+Dim fixtureZoneX, fixtureZoneY As Double
+fixtureZoneX = 14.0
+fixtureZoneY = 48.0
+
+' This script has two modes of operation
+' 1. Preventing Z jogs down into a piece (bottomLimitJog)
+' 2. Preventing GCode from running that attempts to go too deep (bottomLimitGcode)
+' This functionality can be turned off via soft limits
+
+' First check if we are in the fixture zone
+If GetABSPosition(0) < fixtureZoneX and GetABSPosition(1) < fixtureZoneY Then
+  Dim bottomLimit As Double
+
+  ' Check if our Z position is currently below our jog limit
+  ' 804 = Running Gcode
+  ' 111 = Feedhold
+  If GetABSPosition(2) < bottomLimitJog and not GetOEMLED(804) And GetOEMLED(23)  Then
+    ' See if we are trying to move down
+    If GetOEMDRO(2070) <> 0 and (GetABSPosition(2) - GetOEMDRO(2070)) < 0 Then
+      ' User is trying to move down, stop it!
+      JogOff(2)
+      Code "(Fixture limits aborted movement!)"
+    End If
+
+  ' Check if our Z position is currently below our critical GCODE limit
+  Elseif GetABSPosition(2) < bottomLimitGcode Then
+    ' We've found ourselves below our critical limit, emergency stop
+    ' LED: 800 = Emergency, 23 = Soft Limits
+    If not GetOEMLED(800) And GetOEMLED(23) Then
+      DoOemButton(1021) ' Emergency Mode
+    End If
+  End If
+
+  ' Previous DRO
+  SetOEMDRO(2070, GetABSPosition(2))
+End If

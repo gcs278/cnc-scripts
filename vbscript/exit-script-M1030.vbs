@@ -23,9 +23,9 @@ Set filesys = CreateObject("Scripting.FileSystemObject")
 fileNameString = filesys.GetBaseName(fullFileNameString)
 
 ' Add data to jobs file
-'Dim dataFile
-'dataFile = "C:\Users\Shop\Google Drive\GS_Custom_Woodworking\CNC_Data\job_stats_data.csv"
-dataFile = "C:\Mach3\atest.csv"
+Dim dataFile
+dataFile = "C:\Users\Shop\Google Drive\GS_Custom_Woodworking\CNC_Data\job_stats_data.csv"
+'dataFile = "C:\Mach3\atest.csv"
 If Not filesys.FileExists( dataFile ) Then
 	filesys.CreateTextFile( dataFile )
 End If
@@ -97,7 +97,7 @@ objMessage.Configuration.Fields.Update
 'Now send the message!
 'On Error Resume Next
 objMessage.Send
- objMessage.To = "gcs278@vt.edu"
+objMessage.To = "gcs278@vt.edu"
 objMessage.Send
 objMessage.To = "7579994503@mms.att.net"
 objMessage.Send

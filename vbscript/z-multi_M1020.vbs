@@ -1,15 +1,34 @@
 Option Explicit
 Dim safeZ
-safeZ = 1.5
+safeZ = -2.0
 Dim tmpFileId As String
 tmpFileId = "_TEMPORARY_COPY.gcode"
 Dim DEBUG
 DEBUG = False
 Set objFSO=CreateObject("Scripting.FileSystemObject")
+Dim skipVerifyTap as Boolean
+
+' Variables for Auto Z jig
+Dim autoZJigSafeZ As Double
+Dim feedRateFast As Integer
+Dim feedRateSlow As Integer
+Dim autoZJigY As Double
+autoZJigSafeZ = -1.0
+feedRateFast = 120
+feedRateSlow = 20
+autoZJigY = 14.51
 
 ' Double jig variable
 Dim doubleJig As Boolean
 doubleJig = GetUserLED(1234)
+
+' Auto Z Jig Variable
+Dim autoZJig As Boolean
+autoZJig = GetUserLED(1235)
+
+if autoZJig then
+  safeZ = -2.0
+End if
 
 ' Define the square jigs that we have
 Dim numOfJigs As Integer
@@ -28,7 +47,7 @@ If objFSO.FolderExists("Z:\grantspence On My Mac") Then
   DEBUG = True
 End if
 
-' Set variable to 1 saying this IS an internal process call
+' Set variable to 1 saying this IS an internal process call to the single z process
 Call SetOEMDRO (2042, 1)
 
 ' Set variable to default 0 saying this We want z routine validation
@@ -131,6 +150,12 @@ fragmentDir = gcodeFileMainDir & gcodeFileNameNoExtension
 Dim zinfoFile As String
 zinfoFile = fragmentDir & "\" & gcodeFileNameNoExtension & ".zinfo"
 
+'''''''''''''''''''''''' AUTO Z Jig Pick up ''''''''''''''''''''''''''''''
+if autoZJig Then
+  Dim retrieveAutoZJigRet As Boolean
+  retrieveAutoZJigRet = retrieveAutoZJig()
+end if
+
 ''''''''''''''''''''''''''' FRAGMENTED Multi Z '''''''''''''''''''''''''''
 If objFSO.FolderExists(fragmentDir) Then
   If objFSO.FileExists(zinfoFile) Then
@@ -142,6 +167,10 @@ If objFSO.FolderExists(fragmentDir) Then
     ' For each of the jigs, do multi Z
     Dim I as Integer
     For I = 0 To (numOfJigs-1)
+      ' Detect Emergency Stop
+      If GetOEMLED(800) Then
+        Exit Sub
+      End If
       Dim firstJig As Boolean
       firstJig = True
 
@@ -151,20 +180,21 @@ If objFSO.FolderExists(fragmentDir) Then
       yJigOffset = jigs(I,1)
       if I > 0 Then
         firstJig = False
-        ' Now Selective second x and y
-        Code "G0X" & xJigOffset & "Y" & yJigOffset
-        While IsMoving()      
-          Sleep 100
-        Wend
-        Begin Dialog ButtonJig 16,32,150,96,"ZERO"
-          Text 10,12,130,60, "Zero X and Y for the second jig and then hit okay." 
-          OKButton 30,70,40,14
-          'CancelButton 80, 70,40,14
-        End Dialog
-        Dim Dlg4 As ButtonJig
-        Dialog Dlg4
-        xJigOffset = GetOEMDRO(800)
-        yJigOffset = GetOEMDRO(801)
+        ' Commented out, this didn't work anyways
+      '  ' Now Selective second x and y
+      '  Code "G0X" & xJigOffset & "Y" & yJigOffset
+      '  While IsMoving()      
+      '    Sleep 100
+      '  Wend
+      '  Begin Dialog ButtonJig 16,32,150,96,"ZERO"
+      '    Text 10,12,130,60, "Zero X and Y for the second jig and then hit okay." 
+      '    OKButton 30,70,40,14
+      '    'CancelButton 80, 70,40,14
+      '  End Dialog
+      '  Dim Dlg4 As ButtonJig
+      '  Dialog Dlg4
+      '  xJigOffset = GetOEMDRO(800)
+      '  yJigOffset = GetOEMDRO(801)
       End If
 
       ' First get the real Z in the middle
@@ -172,8 +202,8 @@ If objFSO.FolderExists(fragmentDir) Then
       ' Absolute Positioning
       Code "G90"
       ' Safe Z
-      Code "G0Z " & safeZ
-      zRealIndex = runZRoutine(xCenter + xJigOffset, yCenter + yJigOffset, firstJig, False)
+      Code "G53Z " & safeZ
+      zRealIndex = runZRoutine(xCenter + xJigOffset, yCenter + yJigOffset, firstJig, autoZJig)
       
       ' Only write RealIndex for first first jig
       if firstJig then
@@ -191,19 +221,23 @@ If objFSO.FolderExists(fragmentDir) Then
       zY = 0
       Set zFile = objFSO.OpenTextFile(zinfoFile)
       Do Until zFile.AtEndOfStream
+        ' Detect Emergency Stop
+        If GetOEMLED(800) Then
+          Exit Sub
+        End If
         Dim infoLine As String
         infoLine = zFile.ReadLine
         If Not IsNumeric(infoLine) Then
           fileName = Str(infoLine)
-        ElseIf (zX + xJigOffset) > (width+ xJigOffset) Or (zY + yJigOffset) > ((yCenter*2)+yJigOffset) Then
-          Code "(ERROR: Value in Zinfo is larger than width or height)"
-          Begin Dialog ButtonSampleTest1 16,32,150,96,"ERROR"
-            Text 10,12,130,60, "ERROR: Value in Zinfo is larger than width or height. Something is wrong contact Grant." 
-            OKButton 30,70,40,14
-            'CancelButton 80, 70,40,14
-          End Dialog
-          Dim Dlg3 As ButtonSampleTest1
-          Dialog Dlg3
+        'ElseIf (zX + xJigOffset) > (width+ xJigOffset) Or (zY + yJigOffset) > ((yCenter*2)+yJigOffset) Then
+        '  Code "(ERROR: Value in Zinfo is larger than width or height)"
+        '  Begin Dialog ButtonSampleTest1 16,32,150,96,"ERROR"
+        '    Text 10,12,130,60, "ERROR: Value in Zinfo is larger than width or height. Something is wrong contact Grant." 
+        '    OKButton 30,70,40,14
+        '    'CancelButton 80, 70,40,14
+        '  End Dialog
+        '  Dim Dlg3 As ButtonSampleTest1
+        '  Dialog Dlg3
           'Exit Sub
         ElseIf zX = 0 Then
           zX = CDbl(infoLine) + xJigOffset
@@ -240,7 +274,7 @@ Else
   ' Absolute Positioning
   Code "G90"
   ' Safe Z
-  Code "G0Z " & safeZ
+  Code "G53Z " & safeZ
   ' Arguments to pass to python
   Dim zArgs As String
   zArgs = ""
@@ -251,6 +285,10 @@ Else
   notFirst = False
   Dim y
   For Each y In yZeros
+    ' Detect Emergency Stop
+    If GetOEMLED(800) Then
+      Exit Sub
+    End If
     Dim realIndex As Boolean
     If y = yCenter Then
       realIndex = True
@@ -261,7 +299,12 @@ Else
     midPoint = width/2
     Dim zOffset As Double
     yArgs = yArgs & y & " "
-    zOffset = runZRoutine(midPoint, y, realIndex, notFirst)
+    if autoZJig Then
+      skipVerifyTap = True
+    else
+      skipVerifyTap = notFirst
+    end if
+    zOffset = runZRoutine(midPoint, y, realIndex, skipVerifyTap)
     zArgs = zArgs & zOffset & " "
     notFirst = True
   Next
@@ -275,6 +318,12 @@ Else
   argFile.Write gcodeFilePathFull
   argFile.Close
 End If
+
+'''''''''''''''''''''''' AUTO Z Jig Place Back ''''''''''''''''''''''''''''''
+if autoZJig Then
+  Dim putBackAutoZJigRet As boolean
+  putBackAutoZJigRet = putBackAutoZJig()
+end if
 
 ' Now we wait for python to create the done file
 Dim fileExists As Boolean
@@ -321,6 +370,72 @@ Code "G0X0Y0Z1.00"
 While IsMoving()      
   Sleep 100
 Wend 
+
+
+' Function that runs retrieves the auto z jig
+' Params:
+Function retrieveAutoZJig() As Boolean
+ ' Retrieveing the auto z jig
+  Code "F" & feedRateFast ' Feed Rate
+  Code "G0G53Z" & autoZJigSafeZ
+  Code "G0G53X2.45Y" & autoZJigY
+  Code "G0G53Z-3.0"
+
+  Code "F" & feedRateSlow
+  ' Position Z for entry
+  Code "G1G53Z-3.7"
+
+  ' Then enter and stop and reposition
+  Code "G1G53X1.55"
+  Code "G1G53Z-3.52"
+
+  ' Grab it and remove it from hanger
+  Code "G1G53X1.04"
+  Code "G1G53Z-2.75"
+
+  ' Move to Z Starting Position
+  Code "F" & feedRateFast
+  Code "G0G53Z" & autoZJigSafeZ  
+
+  Code "G0G53X" & xCenter
+  Code "G0G53Z-1.75"
+  
+  While IsMoving()      
+    Sleep 100
+  Wend
+
+  retrieveAutoZJig = True
+End Function
+
+' Function that places the auto z jig back in it's holder
+' Params:
+Function putBackAutoZJig() As Boolean
+  ' Putting the auto z jig back into it's hanger
+  Code "F" & feedRateFast ' Feed Rate
+  
+  ' Position to put back
+  Code "G0G53Z" & autoZJigSafeZ
+  Code "G0G53X5.5Y" & autoZJigY
+  Code "G0G53X6.5Y" & autoZJigY ' Pull Wire straight
+  Code "G0G53X1Y" & autoZJigY
+  Code "G0G53Z-2.5"
+
+  ' Begin put back
+  Code "F" & feedRateSlow
+  Code "G1G53Z-3.5"
+
+  ' Pull away, leaving clip
+  Code "G1G53X2.5"
+
+  Code "F" & feedRateFast
+  Code "G0G53Z" & autoZJigSafeZ 
+  
+  While IsMoving()      
+    Sleep 100
+  Wend
+   
+  putBackAutoZJig = True
+End Function
 
 ' Function that runs the Z Routine and retrieves the offset
 ' Params:
