@@ -46,7 +46,7 @@ End If
 
 
 ' Set the Z DRO to our previous value (so DRO effectively doesn't change, but Z position does)
-Call SetOEMDRO (180,currentZ)
+Call SetOEMDRO (802,currentZ)
 
 ' Update Z offset counter
 Dim currentOffset As Double

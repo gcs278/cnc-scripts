@@ -42,13 +42,24 @@ EmailSubject = "CNC Job Finished!"
 EmailBody = "The job " & fileNameString & " has just completed.<br>" & vbCRLF & _
         Converted_Time
 
-        
+Set objFSO=CreateObject("Scripting.FileSystemObject")
+Dim PasswordFilePath As String
+Set PasswordFilePath = "c:\Mach3\gmail-password.txt"
+If Not objFSO.FileExists(PasswordFilePath) Then
+        Code "(ERROR: " & PasswordFilePath & " does not exist)"
+        Exit Sub
+End If
+
+' Password File
+Set passwordFile = objFSO.OpenTextFile(PasswordFilePath)
+Dim password As String
+password = passwordFile.ReadLine
+
 Const EmailFrom = "self@gmail.com"
 Const EmailFromName = "Grant Spence"
 Const EmailTo = "7579994134@mms.att.net"
 Const SMTPServer = "smtp.gmail.com"
 Const SMTPLogon = "gscustomwoodworking@gmail.com"
-Const SMTPPassword = "GSCustomWoodworking123!@#"
 Const SMTPSSL = True
 Const SMTPPort = 465
 
@@ -82,7 +93,7 @@ objMessage.Configuration.Fields.Item _
 ("http://schemas.microsoft.com/cdo/configuration/sendusername") = SMTPLogon
 
 objMessage.Configuration.Fields.Item _
-("http://schemas.microsoft.com/cdo/configuration/sendpassword") = SMTPPassword
+("http://schemas.microsoft.com/cdo/configuration/sendpassword") = password
 
 objMessage.Configuration.Fields.Item _
 ("http://schemas.microsoft.com/cdo/configuration/smtpserverport") = SMTPPort
@@ -96,21 +107,21 @@ objMessage.Configuration.Fields.Item _
 objMessage.Configuration.Fields.Update
 'Now send the message!
 'On Error Resume Next
-objMessage.Send
-objMessage.To = "gcs278@vt.edu"
-objMessage.Send
-objMessage.To = "7579994503@mms.att.net"
+' objMessage.Send
+' objMessage.To = "gcs278@vt.edu"
+' objMessage.Send
+objMessage.To = "7579994134@mms.att.net"
 objMessage.Send
 
 ' Cole ESVA
-Dim gcodeFile As String
-Dim gcodeFileBase As String
-gcodeFileBase = GetloadedGCodeFileName()
-gcodeFile = GetloadedGCodeDir() & gcodeFileBase
-If InStr(gcodeFile,"ESVA_REV_A1") <> 0 Then
-  objMessage.To = "7576930266@mms.att.net"
-  objMessage.Send
-End If
+' Dim gcodeFile As String
+' Dim gcodeFileBase As String
+' gcodeFileBase = GetloadedGCodeFileName()
+' gcodeFile = GetloadedGCodeDir() & gcodeFileBase
+' If InStr(gcodeFile,"ESVA_REV_A1") <> 0 Then
+'   objMessage.To = "7576930266@mms.att.net"
+'   objMessage.Send
+' End If
 
 'If Err Then
 '    MsgBox Err.Description,16,"Error Sending Mail"

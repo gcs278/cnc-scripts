@@ -6,5 +6,5 @@ COMMAND="python /Users/grantspence/Google\ Drive/GS_Custom_Woodworking/cnc-scrip
 eval "$COMMAND"
 
 # Watch file system and run it
-watchmedo shell-command -w --patterns="*.gcode" --recursive --command="$COMMAND" /Users/grantspence/Google\ Drive/GS_Custom_Woodworking/
+watchmedo shell-command -w --patterns="*.gcode" --recursive --command="$COMMAND" /Users/grantspence/Google\ Drive/
 

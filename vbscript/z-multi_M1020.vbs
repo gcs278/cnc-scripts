@@ -1,6 +1,10 @@
 Option Explicit
 Dim safeZ
-safeZ = -2.0
+If GetABSPosition(0) > 14.0 Then
+  safeZ = -1.5
+else 
+  safeZ = -2.0
+End If
 Dim tmpFileId As String
 tmpFileId = "_TEMPORARY_COPY.gcode"
 Dim DEBUG
@@ -19,8 +23,8 @@ feedRateSlow = 20
 autoZJigY = 14.51
 
 ' Double jig variable
-Dim doubleJig As Boolean
-doubleJig = GetUserLED(1234)
+Dim numberOfJigs As Integer
+numberOfJigs = GetOEMDRO(2090)
 
 ' Auto Z Jig Variable
 Dim autoZJig As Boolean
@@ -32,15 +36,14 @@ End if
 
 ' Define the square jigs that we have
 Dim numOfJigs As Integer
-Static jigs (2,2) As Double
-numOfJigs = 1
+Static jigs (5,5) As Double
+numOfJigs = GetOEMDRO(2090)
 jigs(0,0) = 0
 jigs(0,1) = 0
-If doubleJig Then
-  numOfJigs = 2
-  jigs(1,0) = -0.06
-  jigs(1,1) = 15.73
-End If
+jigs(1,0) = -0.03
+jigs(1,1) = 15.73
+jigs(2,0) = 0.32
+jigs(2,1) = 31.21
 
 ' Check if we are in my Virtual Machine, if so DEBUG
 If objFSO.FolderExists("Z:\grantspence On My Mac") Then
@@ -62,44 +65,7 @@ Dim doneFilePath As String
 Dim timeString As String
 timeString = Format(Date,"yyyymmdd") & Format(Time,"HHMMSS")
 outFilePath="c:\Mach3\argFiles\z-multi." & timeString & ".txt"
-doneFilePath=outFilePath & ".done"
-
-' Coordinates passed via 2038-2041 OEMDRO
-Dim yCenter As Double
-Dim xCenter As Double
-Dim width As Double
-Dim yZeros
-
-Set yZeros = CreateObject("System.Collections.ArrayList")
-yZeros.Add GetOEMDRO(2038)
-yZeros.Add GetOEMDRO(2039)
-yZeros.Add GetOEMDRO(2040)
-
-width = GetOEMDRO(2041)
-yCenter = GetOEMDRO(2039)
-If width = 0 Then
-  If DEBUG Then
-    width = 9.5
-  Else
-    Code "(ERROR: OEMDRO 2041 for width not set)"
-    Exit Sub
-  End If
-End If
-If yCenter = 0 Then
-  If DEBUG Then
-    yCenter = 5.5
-  Else
-    Code "(ERROR: OEMDRO 2039 for yCenter not set)"
-    Exit Sub
-  End If
-End If
-xCenter = width/2
-
-' Reset these variables
-Call SetOEMDRO (2038, 0)
-Call SetOEMDRO (2039, 0)
-Call SetOEMDRO (2040, 0)
-Call SetOEMDRO (2041, 0)  
+doneFilePath=outFilePath & ".done" 
 
 ' First check that we have a wrong gcode loaded
 Dim gcodeFilePathFull As String
@@ -115,15 +81,24 @@ If Len(gcodeFilePathFull) = 0 Then
 ElseIf InStr(gcodeFilePathFull,tmpFileId) <> 0 Then
   Code "(ERROR: Don't use a TEMPORARY_COPY file!! Load the actual file yo)"
   Exit Sub
-ElseIf InStr(gcodeFilePathFull,"COMPILEDFRAGMENTS") <> 0 Then
+ElseIf InStr(gcodeFilePathFull,"COMPILEDFRAGMENTS") <> 0 Or InStr(gcodeFilePathFull,"COMPILEDMULTI") <> 0 Then
   ' If we are using a compiled fragment, we are going to use the base gcode name
   ' TODO: figure out how to convert COMPILEDFRAGMENTS gcode name into base gcode file
   ' Remove _COMPILEDFRAGMENTS_20180610-135243.gcode from file name base
-  gcodeFileName = Left(gcodeFileName, (Len(gcodeFileName)-40)) & ".gcode"
+  if InStr(gcodeFilePathFull,"COMPILEDFRAGMENTS") <> 0 Then
+    gcodeFileName = Left(gcodeFileName, (Len(gcodeFileName)-40)) & ".gcode"
+    ' Now go back up a dir level, the sub dir should = gcodeFileName minus .gcode now
+    gcodeFileMainDir = Left(GetloadedGCodeDir(), Len(GetloadedGCodeDir())-Len(gcodeFileName)+5)
+    gcodeFilePathFull = gcodeFileMainDir & gcodeFileName
 
-  ' Now go back up a dir level, the sub dir should = gcodeFileName minus .gcode now
-  gcodeFileMainDir = Left(GetloadedGCodeDir(), Len(GetloadedGCodeDir())-Len(gcodeFileName)+5)
-  gcodeFilePathFull = gcodeFileMainDir & gcodeFileName
+  else
+    gcodeFileName = Left(gcodeFileName, (Len(gcodeFileName)-36)) & ".gcode"
+    ' Now go back up a dir level, the sub dir should = gcodeFileName minus .gcode now
+    gcodeFileMainDir = Left(GetloadedGCodeDir(), Len(GetloadedGCodeDir())-Len("multi_compiled\"))
+    gcodeFilePathFull = gcodeFileMainDir & gcodeFileName
+  End If
+
+
 
   If Not objFSO.FileExists(gcodeFilePathFull) Then
     Code "(ERROR: " & gcodeFileName & " does not exist)"
@@ -138,6 +113,43 @@ ElseIf InStr(gcodeFilePathFull,"COMPILEDFRAGMENTS") <> 0 Then
   End If
 End If
 
+' Coordinates passed via 2038-2041 OEMDRO
+Dim yCenter As Double
+Dim xCenter As Double
+Dim width As Double
+Dim yZeros
+
+Set yZeros = CreateObject("System.Collections.ArrayList")
+Dim zZeroTop, zZeroMiddle, zZeroBottom As Double
+zZeroTop = GetOEMDRO(2038)
+zZeroMiddle = GetOEMDRO(2039)
+zZeroBottom = GetOEMDRO(2040)
+If zZeroTop = 0 Then
+  zZeroTop = ( GetOEMDRO(11) - 1.5 ) ' Max Value of GCode minus 1.5
+End If
+If zZeroMiddle = 0 Then
+  zZeroMiddle = ( GetOEMDRO(11) / 2 ) ' Max value of gcode in half
+End If
+If zZeroBottom = 0 Then
+  zZeroBottom = 1.5 ' Standard value
+End If
+yZeros.Add zZeroTop
+yZeros.Add zZeroMiddle
+yZeros.Add zZeroBottom
+
+width = GetOEMDRO(2041)
+yCenter = zZeroMiddle
+If width = 0 Then
+  width = GetOEMDRO(10) ' Max value of X loaded gcode
+End If
+xCenter = width/2
+
+' Reset these variables
+Call SetOEMDRO (2038, 0)
+Call SetOEMDRO (2039, 0)
+Call SetOEMDRO (2040, 0)
+Call SetOEMDRO (2041, 0) 
+
 gcodeFileNameNoExtension = Left(gcodeFileName, (Len(gcodeFileName)-6))
 
 ' Remove Extension and replace with temp identifier
@@ -149,6 +161,7 @@ Dim fragmentDir As String
 fragmentDir = gcodeFileMainDir & gcodeFileNameNoExtension  
 Dim zinfoFile As String
 zinfoFile = fragmentDir & "\" & gcodeFileNameNoExtension & ".zinfo"
+Dim argFileString As String
 
 '''''''''''''''''''''''' AUTO Z Jig Pick up ''''''''''''''''''''''''''''''
 if autoZJig Then
@@ -156,16 +169,17 @@ if autoZJig Then
   retrieveAutoZJigRet = retrieveAutoZJig()
 end if
 
+Dim xJigOffset As Double, yJigOffset As Double
+Dim I as Integer
+
 ''''''''''''''''''''''''''' FRAGMENTED Multi Z '''''''''''''''''''''''''''
 If objFSO.FolderExists(fragmentDir) Then
   If objFSO.FileExists(zinfoFile) Then
     ' Contents of the argument file
-    Dim argFileString As String
     argFileString = "FRAGMENTED" & Chr(13) & Chr(10)
     argFileString = argFileString & fragmentDir & Chr(13) & Chr(10)
    
     ' For each of the jigs, do multi Z
-    Dim I as Integer
     For I = 0 To (numOfJigs-1)
       ' Detect Emergency Stop
       If GetOEMLED(800) Then
@@ -175,7 +189,6 @@ If objFSO.FolderExists(fragmentDir) Then
       firstJig = True
 
       ' First navigate to our default offset
-      Dim xJigOffset As Double, yJigOffset As Double
       xJigOffset = jigs(I,0)
       yJigOffset = jigs(I,1)
       if I > 0 Then
@@ -271,51 +284,60 @@ If objFSO.FolderExists(fragmentDir) Then
 
 Else
   ''''''''''''''''''''''''''' THREEPOINT MULTI Z ''''''''''''''''''''''''''''''''
-  ' Absolute Positioning
-  Code "G90"
-  ' Safe Z
-  Code "G53Z " & safeZ
-  ' Arguments to pass to python
-  Dim zArgs As String
-  zArgs = ""
-  Dim yArgs As String
-  yArgs = ""
+  argFileString = ""
 
-  Dim notFirst As Boolean
-  notFirst = False
-  Dim y
-  For Each y In yZeros
-    ' Detect Emergency Stop
-    If GetOEMLED(800) Then
-      Exit Sub
-    End If
-    Dim realIndex As Boolean
-    If y = yCenter Then
-      realIndex = True
-    Else
-      realIndex = False
-    End If
-    Dim midPoint As Double
-    midPoint = width/2
-    Dim zOffset As Double
-    yArgs = yArgs & y & " "
-    if autoZJig Then
-      skipVerifyTap = True
-    else
-      skipVerifyTap = notFirst
-    end if
-    zOffset = runZRoutine(midPoint, y, realIndex, skipVerifyTap)
-    zArgs = zArgs & zOffset & " "
-    notFirst = True
+  ' For each of the jigs, do multi Z
+  For I = 0 To (numOfJigs-1)
+    ' Absolute Positioning
+    Code "G90"
+    ' Safe Z
+    Code "G53Z " & safeZ
+    
+    ' Repeated code FYI
+    xJigOffset = jigs(I,0)
+    yJigOffset = jigs(I,1)
+
+    argFileString = argFileString & "xJigOffset " & xJigOffset & Chr(13) & Chr(10)
+    argFileString = argFileString & "yJigOffset " & yJigOffset & Chr(13) & Chr(10)
+
+    Dim notFirst As Boolean
+    notFirst = False
+    Dim y
+    For Each y In yZeros
+      ' Detect Emergency Stop
+      If GetOEMLED(800) Then
+        Exit Sub
+      End If
+
+      ' Only take the index when it's in the center and it's the first Jig
+      Dim realIndex As Boolean
+      If y = yCenter And I = 0 Then
+        realIndex = True
+      Else
+        realIndex = False
+      End If
+
+      Dim midPoint As Double
+      midPoint = (width / 2) + xJigOffset
+      Dim zOffset As Double
+      if autoZJig Then
+        skipVerifyTap = True
+      else
+        skipVerifyTap = notFirst
+      end if
+      zOffset = runZRoutine(midPoint, y + yJigOffset, realIndex, skipVerifyTap)
+      argFileString = argFileString & "POINT " & y & " " & zOffset & Chr(13) & Chr(10)
+
+      notFirst = True
+    Next
   Next
 
   ' Write the arguments to file
   Set argFile = objFSO.CreateTextFile(outFilePath,True)
-  argFile.Write "THREEPOINT" & Chr(13) & Chr(10)
-  argFile.Write zArgs & Chr(13) & Chr(10)
-  argFile.Write yArgs & Chr(13) & Chr(10)
-  argFile.Write yCenter & Chr(13) & Chr(10)
-  argFile.Write gcodeFilePathFull
+  argFile.Write "THREEPOINT_MULTI" & Chr(13) & Chr(10)
+  argFile.Write gcodeFilePathFull & Chr(13) & Chr(10)
+  argFile.Write "yCenter " & yCenter & Chr(13) & Chr(10)
+  argFile.Write argFileString
   argFile.Close
 End If
 
@@ -329,7 +351,7 @@ end if
 Dim fileExists As Boolean
 fileExists = False
 Dim fileTimeout
-fileTimeout = 25
+fileTimeout = 35
 Speak("Waiting for python to complete post processing")
 While fileExists = False And fileTimeout <> 0
   fileExists = objFSO.FileExists(doneFilePath)

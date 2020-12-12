@@ -27,7 +27,6 @@ rootdir = home + '\\Google Drive\\GS_Custom_Woodworking'
 argFileDir="C:\\Mach3\\argFiles\\"
 argFileGlob=argFileDir + "z-multi*.txt"
 tmpdir = 'C:\\tmp\\'
-tmpMultiCompiledDir = "multi_compiled"
 audioDir = rootdir + "\\CNC_Data\\audio_clips\\"
 playwave = rootdir + "\\cnc-scripts\\python\\playwave.py"
 python = "C:\\Python27\\python.exe"
@@ -109,21 +108,9 @@ def handleError(message, fatal=False):
 # zPoints should be:
 #    ( ( (9.5,-2.10), (5.5,-2.11), (1.5,-2.12) ), ( (9.5,-2.09), (5.5,-2.08), (1.5,-2.07) ) )
 def threepointMulti(realZindex, zPoints, jigs, yCenter, srcGcodeFile):
-    # Put the generated files in the same area, just put it in the 
     fileBaseName = os.path.splitext(os.path.basename(srcGcodeFile))[0]
-    parentName = os.path.dirname(srcGcodeFile)
-    tmpDirPath = parentName + slash + tmpMultiCompiledDir
-    timestr = time.strftime("%Y%m%d-%H%M%S")
-    if not os.path.isdir(tmpDirPath): os.mkdir(tmpDirPath)
-    tmpFileName = tmpDirPath + slash + fileBaseName + "_COMPILEDMULTI_"+timestr+".gcode"
-
-    # Clean up compile multi files, we won't need to use them again
-    for compFragFilesOld in glob.glob(tmpDirPath + slash + "*_COMPILEDMULTI_*"):
-        try:
-            os.remove(compFragFilesOld)
-        except OSError as e:
-            print "ERROR: Can't remove " + compFragFilesOld
-            print e
+    tmpFile = fileBaseName + "_TEMPORARY_COPY.gcode"
+    tmpFileName = tmpdir + tmpFile
 
     if not os.path.exists(tmpdir):
         os.makedirs(tmpdir)
@@ -131,131 +118,246 @@ def threepointMulti(realZindex, zPoints, jigs, yCenter, srcGcodeFile):
     if os.path.exists(tmpFileName):
         os.remove(tmpFileName)
 
-    # This is where our machine is really indexed at (first Jig)
-    realIndex = float(zPoints[0][1][1])
+    jigCount=0
+    for jig in jigs:
+        xJigOffset = float(jig[0])
+        yJigOffset = float(jig[1])
 
-    # Write standard gcodeHeader
-    with open(tmpFileName,"a") as newfile:
-        for gcode in gcodeHeader:
-            newfile.write(gcode + '\n')
-            
-        jigCount=0
-        for jig in jigs:
-            xJigOffset = float(jig[0])
-            yJigOffset = float(jig[1])
+        # Create zZeros
+        zZeros = []
+        yUpper = float(zPoints[jigCount][0][0])
+        zUpper = float(zPoints[jigCount][0][1])
+        zMid = float(zPoints[jigCount][1][1])
+        yLower = float(zPoints[jigCount][2][0])
+        zLower = float(zPoints[jigCount][2][1])
+        zZeros.append( (yUpper, zUpper - zMid) )
+        zZeros.append( (yCenter, 0) )
+        zZeros.append( (yLower, zLower - zMid) )
+        logFile.write("zZeros:\t\t\t" + str(zZeros) + "\n")
 
-            # Create zZeros
-            zZeros = []
-            yUpper = float(zPoints[jigCount][0][0])
-            zUpper = float(zPoints[jigCount][0][1])
-            zMid = float(zPoints[jigCount][1][1])
-            yLower = float(zPoints[jigCount][2][0])
-            zLower = float(zPoints[jigCount][2][1])
-            zZeros.append( (yUpper, zUpper - zMid) )
-            zZeros.append( (yCenter, 0) )
-            zZeros.append( (yLower, zLower - zMid) )
-            logFile.write("zZeros:\t\t\t" + str(zZeros) + "\n")
+        if DEBUG: print("zZeros:\t\t\t" + str(zZeros))
 
-            zJigOffset = zMid - realIndex
+        # Determine the slopes for the points
+        # Old Code - Haven't even bothered, it works
+        slopes=[]
+        prev_yLoc=0
+        prev_zZero=0
+        for yLoc, zZero in zZeros:
+            if prev_yLoc != 0 or prev_zZero != 0:
+                if yLoc >= yCenter:
+                    slope = findSlope(prev_yLoc, prev_zZero, yLoc, zZero)
+                else:
+                    slope=-findSlope(prev_yLoc, prev_zZero, yLoc, zZero)
+                slopes.append( (prev_yLoc, slope) )
+            prev_yLoc = yLoc
+            prev_zZero = zZero
 
-            if DEBUG: print("zZeros:\t\t\t" + str(zZeros))
+        # Add this fake one inthere for last slope to be calculated
+        # Otherwise for loop stops short
+        # TODO fix this
+        slopes.append((0,1))
+        logFile.write("Slopes:\t\t\t" + str(slopes) + "\n")
+        # Test function
+        #for x in xrange(100):
+            #print findNewOffset(x*0.1,slopes, zZeros)
 
-            # Determine the slopes for the points
-            # Old Code - Haven't even bothered, it works
-            slopes=[]
-            prev_yLoc=0
-            prev_zZero=0
-            for yLoc, zZero in zZeros:
-                if prev_yLoc != 0 or prev_zZero != 0:
-                    if yLoc >= yCenter:
-                        slope = findSlope(prev_yLoc, prev_zZero, yLoc, zZero)
-                    else:
-                        slope=-findSlope(prev_yLoc, prev_zZero, yLoc, zZero)
-                    slopes.append( (prev_yLoc, slope) )
-                prev_yLoc = yLoc
-                prev_zZero = zZero
-
-            # Add this fake one inthere for last slope to be calculated
-            # Otherwise for loop stops short
-            # TODO fix this
-            slopes.append((0,1))
-            logFile.write("Slopes:\t\t\t" + str(slopes) + "\n")
-            # Test function
-            #for x in xrange(100):
-                #print findNewOffset(x*0.1,slopes, zZeros)
-
-            # Touch temp file to temp location so we don't modify the real one
+        # Touch temp file to temp location so we don't modify the real one
+        with open(tmpFileName, 'a'):
             os.utime(tmpFileName, None)
 
-            previousY = None
-            with open(srcGcodeFile) as file:
-                for line in file:
-                    line_clean = line.strip()
-                    match = gcodeRegex.match(line_clean)
-                    if match:
-                        if DEBUG:
-                            print "--------------------------------"
-                            print "OLD GCODE: " + str(line_clean)
+        previousY = None
+        with open(srcGcodeFile) as file:
+            # Write standard gcodeHeader
+            with open(tmpFileName,"a") as newfile:
+                for gcode in gcodeHeader:
+                    newfile.write(gcode + '\n')
 
-                        y = None
-                        # Get Y Value
-                        if match.group(6):
-                            y = float(match.group(6))
+            for line in file:
+                line_clean = line.strip()
+                match = gcodeRegex.match(line_clean)
+                if match:
+                    if DEBUG:
+                        print "--------------------------------"
+                        print "OLD GCODE: " + str(line_clean)
 
-                        if y is None and previousY is not None:
-                            # We just have Z instruction and no X or Y, so use last Y
-                            # In theory, verbose GCODE should never let this happen anymore (old code)
-                            # But there could be the case where we don't verbose the gcode
-                            if DEBUG: print "NO Y instruction, using previous offset"
-                            y = previousY
-                        elif y is None and previousY is None:
-                            if DEBUG: print "NO Y instruction, NO last Y, not applying offset"
-                        
-                        # Set the previousY value
-                        previousY = y
+                    y = None
+                    # Get Y Value
+                    if match.group(6):
+                        y = float(match.group(6))
 
-                        if DEBUG: print "Y Value: " + bcolors.FAIL + str(y)+ bcolors.ENDC
+                    if y is None and previousY is not None:
+                        # We just have Z instruction and no X or Y, so use last Y
+                        # In theory, verbose GCODE should never let this happen anymore (old code)
+                        # But there could be the case where we don't verbose the gcode
+                        if DEBUG: print "NO Y instruction, using previous offset"
+                        y = previousY
+                    elif y is None and previousY is None:
+                        if DEBUG: print "NO Y instruction, NO last Y, not applying offset"
+                    
+                    # Set the previousY value
+                    previousY = y
 
-                        # If we don't have a Y yet, then just don't calculate it
-                        zOffset = 0 # Default
-                        if y is not None:
-                            # Don't forget to add in zJigOffset
-                            zOffset = findNewOffset(y, slopes, zZeros) + zJigOffset
+                    if DEBUG: print "Y Value: " + bcolors.FAIL + str(y)+ bcolors.ENDC
 
-                        # If Z is already positive, it means the that the machine is not cutting, but 
-                        # just moving around. Don't mess with these values
-                        if match.group(9):
-                            z = float(match.group(9))
-                            if z > 0.1:
-                                zOffset = 0
+                    # If we don't have a Y yet, then just don't calculate it
+                    zOffset = 0 # Default
+                    if y is not None:
+                        zOffset = findNewOffset(y, slopes, zZeros)
 
-                        newGcode = gcodeBuilder(match, xJigOffset, yJigOffset, zOffset)
-                        
-                        # Write the modified line to the file
-                        if newGcode is not None:
+                    # If Z is already positive, it means the that the machine is not cutting, but 
+                    # just moving around. Don't mess with these values
+                    if match.group(9):
+                        z = float(match.group(9))
+                        if z > 0.1:
+                            zOffset = 0
+
+                    newGcode = gcodeBuilder(match, xJigOffset, yJigOffset, zOffset)
+                    
+                    # Write the modified line to the file
+                    if newGcode is not None:
+                        with open(tmpFileName,"a") as newfile:
                             newfile.write(newGcode + "\n")
 
-                        if DEBUG:
-                            # print "Z Value: " + str(z)
-                            print("Z Offset: " + str(zOffset))
-                            # print "New Z: " + str(newZ)
-                            print("xJigOffset: " + str(xJigOffset))
-                            print("yJigOffset: " + str(yJigOffset))
-                            print("zJigOffset: " + str(zJigOffset))
-                            print "NEW GCODE: " + str(newGcode)
-                            print "ZEROS: " + str(zZeros)
-                            print "SLOPES: " + str(slopes)
-                            print("JIG: " + str(jigCount))
+                    if DEBUG:
+                        # print "Z Value: " + str(z)
+                        print("Z Offset: " + str(zOffset))
+                        # print "New Z: " + str(newZ)
+                        print("xJigOffset: " + str(xJigOffset))
+                        print("yJigOffset: " + str(yJigOffset))
+                        print "NEW GCODE: " + str(newGcode)
+                        print "ZEROS: " + str(zZeros)
+                        print "SLOPES: " + str(slopes)
+                        print("JIG: " + str(jigCount))
 
-            jigCount+=1
-            handleError("JIG " + str(jigCount) + ": The largest Z differential is " + str("{0:.3f}".format(max(zZeros[0][1], zZeros[-1][1], zZeros[0][1], zZeros[-1][1]))))
+            # Write our standard gcode footer on the COMBO file
+            with open(tmpFileName,"a") as newfile:
+                for gcode in gcodeFooter:
+                    newfile.write(gcode + '\n')                        
 
-        # Write our standard gcode footer on the COMBO file
-        for gcode in gcodeFooter:
-            newfile.write(gcode + '\n')     
+        jigCount+=1
+        handleError("JIG " + str(jigCount) + ": The largest Z differential is " + str("{0:.3f}".format(max(zZeros[0][1], zZeros[-1][1], zZeros[0][1], zZeros[-1][1]))))
+
 
     print "FINSIHED ZEROING"
     
+    return tmpFileName
+
+def threepointSingle(zZeros):
+    fileBaseName=os.path.splitext(os.path.basename(targetFile))[0]
+    tmpFile=fileBaseName+"_TEMPORARY_COPY.gcode"
+    tmpTmpFile=fileBaseName+"_WORKING.gcode"
+    tmpFileName=tmpdir+tmpFile
+    tmpTmpFileName=tmpdir+tmpTmpFile
+
+    if not os.path.exists(tmpdir):
+        os.makedirs(tmpdir)
+
+    if os.path.exists(tmpFileName):
+        os.remove(tmpFileName)
+
+    if os.path.exists(tmpTmpFileName):
+        os.remove(tmpTmpFileName)
+
+    coordList=[]
+    slopes=[]
+
+    prev_yLoc=0
+    prev_zZero=0
+    for yLoc, zZero in zZeros:
+        if prev_yLoc != 0 or prev_zZero != 0:
+            if yLoc >= yCenter:
+                slope=findSlope(prev_yLoc,prev_zZero,yLoc,zZero)
+            else:
+                slope=-findSlope(prev_yLoc,prev_zZero,yLoc,zZero)
+            slopes.append((prev_yLoc,slope))
+        prev_yLoc = yLoc
+        prev_zZero = zZero
+
+    # Add this fake one inthere for last slope to be calculated
+    # Otherwise for loop stops short
+    # TODO fix this
+    slopes.append((0,1))
+    logFile.write("Slopes:\t\t\t" + str(slopes) + "\n")
+    # Test function
+    #for x in xrange(100):
+        #print findNewOffset(x*0.1,slopes, zZeros)
+
+
+    # Touch temp file to temp location so we don't modify the real one
+    with open(tmpTmpFileName, 'a'):
+        os.utime(tmpTmpFileName, None)
+
+    previousY = 0
+    with open(targetFile) as file:
+        for line in file:
+            line_clean = line.strip()
+            match = gcodeRegex.match(line_clean)
+            if match:
+                if DEBUG:
+                    print "--------------------------------"
+                    print "OLD GCODE: " + str(line_clean)
+
+                #x = float(match.group(1)) # Don't need X yet
+                ######### Y SECTION ###########
+
+                y = 0
+                if match.group(6):
+                    y = float(match.group(6))
+                #DEBUG = True if y > 8.8 and y < 9.8 else False
+                if y == 0 and previousY != 0:
+                    # We just have Z instruction and no X or Y, so use last Y
+                    if DEBUG:
+                        print "NO Y instruction, using previous"
+                    y = previousY
+                elif y == 0 and previousY == 0:
+                    if DEBUG:
+                        print "NO Y instruction, NO last Y, skipping"
+                    # if we just have Z, no Y values, we don't do anything
+                    with open(tmpTmpFileName,"a") as file:
+                        file.write(line_clean + "\n")
+                    continue
+                previousY = y
+
+                if DEBUG:
+                    print "Y Value: " + bcolors.FAIL + str(y)+ bcolors.ENDC
+
+                ####### F Section ############
+                f = ""
+                if match.group(11):
+                    f = str(match.group(11))
+
+                ######## Z SECTION ############
+                if match.group(9):
+                    z = float(match.group(9))
+                else:
+                    if DEBUG:
+                        print "NO Z instruction, skipping"
+                    with open(tmpTmpFileName,"a") as file:
+                        file.write(line_clean + "\n")
+                    continue
+                zOffset=findNewOffset(y,slopes, zZeros)
+                newZ=round(z+zOffset,4)
+                newLine=str(match.group(1) + "Z" + str(newZ)) + f
+                
+                # Write the modified line to the fil
+                with open(tmpTmpFileName,"a") as file:
+                    file.write(newLine + "\n")
+
+                if DEBUG:
+                    print "Z Value: " + str(z)
+                    print "Offset: " + str(zOffset) 
+                    print "New Z: " + str(newZ)
+                    print "NEW GCODE: " + str(newLine)
+                    print "ZEROS: " + str(zZeros)
+                    print "SLOPES: " + str(slopes)
+            else:
+                # We didn't match, so unmodified line
+                with open(tmpTmpFileName,"a") as file:
+                    file.write(line_clean + "\n")
+    print "FINSIHED ZEROING"
+    
+    # Copy the WORKING copy to the ACTUAL temp copy
+    shutil.copyfile(tmpTmpFileName, tmpFileName)
     return tmpFileName
 
 def findSlope(x1, y1, x2, y2):
@@ -303,7 +405,6 @@ def findNewOffset(y, slopes, zeros):
 def gcodeBuilder(match, xJigOffset=0, yJigOffset=0, zOffset=0):
     # Make sure this isn't a header or footer
     if not match or any(match.group(0) in s for s in gcodeHeader) or any(match.group(0) in s for s in gcodeFooter):
-        if DEBUG: print("Skipping Gcode: " + str(match.group(0)))
         return None
 
     ######### X Section - Apply jig X offset ############

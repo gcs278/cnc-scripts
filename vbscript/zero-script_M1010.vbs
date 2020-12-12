@@ -51,7 +51,7 @@ End If
    Speak("Connect the clip to the spindle")
    Speak("Tap cutter with touch plate")
    
-   Final_Back_Off = 0.20
+   Final_Back_Off = 0.08
    Initial_Back_Off = 0.02
    Probing_Feed_Rate = 8
    

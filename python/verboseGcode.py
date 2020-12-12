@@ -33,6 +33,13 @@ bakFileExtension = ".nonverbose.bak"
 # Modify this to change the "resolution" aka distance between gcodes
 desiredResolution = 0.1
 
+# Returns abs or none
+def absNone(number):
+	if number is None:
+		return None
+	else:
+		return abs(number)
+
 def makeGcodeVerbose(gcodeFile):
 	with open(logFilePath, 'a') as logFile:
 		logFile.write("\n-----------------------------------------------------------------------------\n")
@@ -140,14 +147,20 @@ def makeGcodeVerbose(gcodeFile):
 				fArg = "F" + "{0:.1f}".format(f) if f is not None else ""
 				newLine = gArg + xArg + yArg + zArg + fArg
 
+				# if DEBUG:
+				# 	print "ResolutionX:\t" + str(resolutionX)
+				# 	print "ResolutionY:\t" + str(resolutionY)
+				# 	print "ResolutionZ:\t" + str(resolutionZ)
+
 				# Check if we have a resolution problem
-				if ( (resolutionX is not None and resolutionX > desiredResolution) or \
-					(resolutionY is not None and resolutionY > desiredResolution) or \
-					(resolutionZ is not None and resolutionZ > desiredResolution) ) \
+				# 10/18/19 - Use abs!!
+				if ( (resolutionX is not None and absNone(resolutionX) > desiredResolution) or \
+					(resolutionY is not None and absNone(resolutionY) > desiredResolution) or \
+					(resolutionZ is not None and absNone(resolutionZ) > desiredResolution) ) \
 					and z < 0.10:
 
 					# The furthest away value X Y or Z
-					maxDifference = max(resolutionX, resolutionY, resolutionZ)
+					maxDifference = max(absNone(resolutionX), absNone(resolutionY), absNone(resolutionZ))
 					# insertsNeeded is the minimum amount of "rounds" or inserts needed to achieve desired resolution
 					# Other axis that have smaller distances, will have higher resolutions
 					insertsNeeded = int(math.ceil(maxDifference / desiredResolution) )
@@ -182,10 +195,10 @@ def makeGcodeVerbose(gcodeFile):
 							# stepX is the amount we should step back
 							insertX = insertX - stepX
 						if resolutionY is not None:
-							# stepX is the amount we should step back
+							# stepY is the amount we should step back
 							insertY = insertY - stepY
 						if resolutionZ is not None:
-							# stepX is the amount we should step back
+							# stepZ is the amount we should step back
 							insertZ = insertZ - stepZ
 
 						# Create the new arguments, if no inserts need on the axis, use the original args
@@ -275,4 +288,5 @@ if __name__ == "__main__":
 			sys.exit(1)
 
 	for gcodeFile in sys.argv[1:]:
+		DEBUG=True
 		makeGcodeVerbose(gcodeFile)
