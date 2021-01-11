@@ -6,9 +6,10 @@ from verboseGcode import makeGcodeVerbose
 from shutil import copyfile
 
 #rootdir = 'C:\\Users\\Grant\\Google Drive\\GS_Custom_Woodworking'
-rootdir = '/Users/grantspence/Google Drive'
+rootdir = '/Users/grantspence/Google Drive/GS_Custom_Woodworking'
 #rootdir = '\\\\vmware-host\\Shared Folders\\grantspence On My Mac\\Google Drive\\GS_Custom_Woodworking'
 #archiveDir = rootdir + '\\GCode_Archive'
+gcodedir = rootdir + '/GCode'
 archiveDir = rootdir + '/GCode_Archive'
 
 fileExtention=".gcode" 
@@ -66,7 +67,7 @@ def desk_sign_compile(gcodeFile):
 if len(sys.argv) == 2 and sys.argv[1] == '--revert':
     print("Reverting changes...")
     fileCount=0
-    for subdir, dirs, files in os.walk(rootdir):
+    for subdir, dirs, files in os.walk(gcodedir):
         for file in files:
             if file.endswith(fileExtention):
                 fileCount+=1
@@ -88,10 +89,11 @@ else:
     timestr = time.strftime("%I:%M %p on %B %d")
     print("Running configuration...it's "+timestr)
     fileCount=0
-    for subdir, dirs, files in os.walk(rootdir):
+    for subdir, dirs, files in os.walk(gcodedir):
         for file in files:
             if file.endswith(fileExtention):
                 fileCount+=1
+                print(f"File Count {fileCount}\r", end="")
                 # print(os.path.join(subdir, file)
                 filePath = os.path.join(subdir, file)
                 
@@ -99,7 +101,7 @@ else:
                 if ' ' in file:
                     newFileName=file.replace(' ','_')
                     newFilePath = os.path.join(subdir, newFileName)
-                    print "Renaming " + file + " to " + newFileName
+                    print("Renaming " + file + " to " + newFileName)
                     os.rename(filePath, newFilePath)
                     filePath=newFilePath
                     file = newFileName

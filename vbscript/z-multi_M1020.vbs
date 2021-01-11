@@ -41,9 +41,9 @@ numOfJigs = GetOEMDRO(2090)
 jigs(0,0) = 0
 jigs(0,1) = 0
 jigs(1,0) = -0.03
-jigs(1,1) = 15.73
+jigs(1,1) = 15.74
 jigs(2,0) = 0.32
-jigs(2,1) = 31.21
+jigs(2,1) = 31.23
 
 ' Check if we are in my Virtual Machine, if so DEBUG
 If objFSO.FolderExists("Z:\grantspence On My Mac") Then
@@ -117,32 +117,50 @@ End If
 Dim yCenter As Double
 Dim xCenter As Double
 Dim width As Double
-Dim yZeros
+Dim height As Double
+Dim edgePadding As Double
+edgePadding = 1.5
 
-Set yZeros = CreateObject("System.Collections.ArrayList")
+' Get Width and Height arguments
+height = GetOEMDRO(2038)
+width = GetOEMDRO(2039)
+
+' Y Zero Values
 Dim zZeroTop, zZeroMiddle, zZeroBottom As Double
-zZeroTop = GetOEMDRO(2038)
-zZeroMiddle = GetOEMDRO(2039)
-zZeroBottom = GetOEMDRO(2040)
+zZeroTop = height - edgePadding
+zZeroMiddle = height / 2
+zZeroBottom = edgePadding
+' Special logic for dynamic Z (use the gcode max values to determine area)
 If zZeroTop = 0 Then
-  zZeroTop = ( GetOEMDRO(11) - 1.5 ) ' Max Value of GCode minus 1.5
+  zZeroTop = ( GetOEMDRO(11) - edgePadding ) ' Max Value of GCode minus 1.5
 End If
 If zZeroMiddle = 0 Then
   zZeroMiddle = ( GetOEMDRO(11) / 2 ) ' Max value of gcode in half
 End If
 If zZeroBottom = 0 Then
-  zZeroBottom = 1.5 ' Standard value
+  zZeroBottom = edgePadding ' Standard value
 End If
-yZeros.Add zZeroTop
-yZeros.Add zZeroMiddle
-yZeros.Add zZeroBottom
 
-width = GetOEMDRO(2041)
 yCenter = zZeroMiddle
 If width = 0 Then
   width = GetOEMDRO(10) ' Max value of X loaded gcode
 End If
 xCenter = width/2
+
+' X Zero Values
+Dim zZeroLeft, zZeroRight As Double
+zZeroLeft = edgePadding
+zZeroRight = width - edgePadding
+
+' Dictionary of AXIS,value points to take a reading
+' Keys can't be the same, just append number (we will remove later)
+Dim multiZeroPoints
+Set multiZeroPoints = CreateObject("Scripting.Dictionary")
+multiZeroPoints.Add "YPOINT2", zZeroBottom
+multiZeroPoints.Add "XPOINT1", zZeroLeft
+multiZeroPoints.Add "YPOINT1", zZeroTop
+multiZeroPoints.Add "XPOINT2", zZeroRight
+multiZeroPoints.Add "CENTERPOINT1", 0 ' Logic should use xCenter and yCenter
 
 ' Reset these variables
 Call SetOEMDRO (2038, 0)
@@ -283,7 +301,7 @@ If objFSO.FolderExists(fragmentDir) Then
   End If
 
 Else
-  ''''''''''''''''''''''''''' THREEPOINT MULTI Z ''''''''''''''''''''''''''''''''
+  ''''''''''''''''''''''''''' FIVEPOINT MULTI Z ''''''''''''''''''''''''''''''''
   argFileString = ""
 
   ' For each of the jigs, do multi Z
@@ -302,31 +320,49 @@ Else
 
     Dim notFirst As Boolean
     notFirst = False
-    Dim y
-    For Each y In yZeros
+    Dim pointType, key
+    Dim keyStr as String
+    For Each key In multiZeroPoints
       ' Detect Emergency Stop
       If GetOEMLED(800) Then
         Exit Sub
       End If
+      ' This is really stupid, but vbs won't work without copying!
+      keyStr = key
+      ' Remove the last character (the number)
+      pointType = Left(str(keyStr), (Len(keyStr) ))
+      pointType = Trim(pointType)
 
       ' Only take the index when it's in the center and it's the first Jig
       Dim realIndex As Boolean
-      If y = yCenter And I = 0 Then
+      If pointType = "CENTERPOINT" And I = 0 Then
         realIndex = True
       Else
         realIndex = False
       End If
 
-      Dim midPoint As Double
-      midPoint = (width / 2) + xJigOffset
+      Dim targetX, targetY
+      if pointType = "XPOINT" Then
+        targetX = multiZeroPoints(key) + xJigOffset
+        targetY = yCenter + yJigOffset
+      Elseif pointType = "YPOINT" Then
+        targetX = xCenter + xJigOffset
+        targetY = multiZeroPoints(key) + yJigOffset
+      Elseif pointType = "CENTERPOINT" Then
+        targetX = xCenter + xJigOffset
+        targetY = yCenter + yJigOffset
+      End If
+      targetX = Round(targetX,1)
+      targetY = Round(targetY,1)
+
       Dim zOffset As Double
       if autoZJig Then
         skipVerifyTap = True
       else
         skipVerifyTap = notFirst
       end if
-      zOffset = runZRoutine(midPoint, y + yJigOffset, realIndex, skipVerifyTap)
-      argFileString = argFileString & "POINT " & y & " " & zOffset & Chr(13) & Chr(10)
+      zOffset = runZRoutine(targetX, targetY, realIndex, skipVerifyTap)
+      argFileString = argFileString & pointType & " " & targetX & "," & targetY & "," & zOffset & Chr(13) & Chr(10)
 
       notFirst = True
     Next
@@ -334,9 +370,8 @@ Else
 
   ' Write the arguments to file
   Set argFile = objFSO.CreateTextFile(outFilePath,True)
-  argFile.Write "THREEPOINT_MULTI" & Chr(13) & Chr(10)
+  argFile.Write "FIVEPOINT_MULTI" & Chr(13) & Chr(10)
   argFile.Write gcodeFilePathFull & Chr(13) & Chr(10)
-  argFile.Write "yCenter " & yCenter & Chr(13) & Chr(10)
   argFile.Write argFileString
   argFile.Close
 End If

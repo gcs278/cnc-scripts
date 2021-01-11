@@ -99,7 +99,7 @@ for subdir, dirs, files in os.walk(rootdir):
 
 				# Check that we actually have a file
 				if not centers:
-					print "ERROR: Can't make zinfo file cause no Gcode Files in " + fragmentDir
+					print("ERROR: Can't make zinfo file cause no Gcode Files in " + fragmentDir)
 					exit()
 
 				for center in centers:
@@ -112,13 +112,13 @@ for subdir, dirs, files in os.walk(rootdir):
 					if os.path.exists(realZinfoFile):
 						# if it already exists, compare and only recreate if 
 						if not filecmp.cmp(workingZinfoFile, realZinfoFile):
-							print "RE-Creating zinfo file for " + fragmentDir
+							print("RE-Creating zinfo file for " + fragmentDir)
 							copyfile(workingZinfoFile, realZinfoFile)
 					else:
-						print "Creating zinfo file for " + fragmentDir
+						print("Creating zinfo file for " + fragmentDir)
 						copyfile(workingZinfoFile, realZinfoFile)
 					os.remove(workingZinfoFile)
 				except OSError as e:
-					print "ERROR: Couldn't copy " + workingZinfoFile + " to " + realZinfoFile
+					print("ERROR: Couldn't copy " + workingZinfoFile + " to " + realZinfoFile)
 					# file.write(str(centerPoint[0]) + " " + str(centerPoint[1]) + " " + fragmentFile + "\n")
 			

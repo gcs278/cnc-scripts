@@ -75,7 +75,7 @@ def makeGcodeVerbose(gcodeFile):
 			match = regex.match(line_clean)
 			if match:
 				if DEBUG:
-					print "---------------------------------"
+					print("---------------------------------")
 				########### Think of this in Steps ###########################################
 				### Step 1: Make Gcode explicit
 				###        i.e. G0X1.235Z0.124 should become G0X1.234Y4.245Z0.124 using previous value
@@ -92,12 +92,12 @@ def makeGcodeVerbose(gcodeFile):
 				# If both are None, then we don't have a Y currently, and never had, so must skip
 				if x is None and previousX is None:
 					if DEBUG:
-						print "NO X instruction, NO last X"
+						print("NO X instruction, NO last X")
 				# If current y is None, but we have a previous y, then subsitute the previous y
 				elif x is None and previousX is not None:
 					# We just have X or Z instruction and no Y, so use last Y
 					if DEBUG:
-						print "NO X instruction this time, using previous X value"
+						print("NO X instruction this time, using previous X value")
 					x = previousX
 				elif x is not None and previousX is not None:
 					resolutionX = x - previousX
@@ -108,12 +108,12 @@ def makeGcodeVerbose(gcodeFile):
 				# If both are None, then we don't have a Y currently, and never had, so must skip
 				if y is None and previousY is None:
 					if DEBUG:
-						print "NO Y instruction, NO last Y"
+						print("NO Y instruction, NO last Y")
 				# If current y is None, but we have a previous y, then subsitute the previous y
 				elif y is None and previousY is not None:
 					# We just have X or Z instruction and no Y, so use last Y
 					if DEBUG:
-						print "NO Y instruction this time, using previous y value"
+						print("NO Y instruction this time, using previous y value")
 					y = previousY
 				elif y is not None and previousY is not None:
 					resolutionY = y - previousY
@@ -124,12 +124,12 @@ def makeGcodeVerbose(gcodeFile):
 				# If both are None, then we don't have a Y currently, and never had, so must skip
 				if z is None and previousZ is None:
 					if DEBUG:
-						print "NO Z instruction, NO last Z"
+						print("NO Z instruction, NO last Z")
 				# If current y is None, but we have a previous y, then subsitute the previous y
 				elif z is None and previousZ is not None:
 					# We just have X or Z instruction and no Y, so use last Y
 					if DEBUG:
-						print "NO Z instruction this time, using previous Z value"
+						print("NO Z instruction this time, using previous Z value")
 					z = previousZ
 				elif z is not None and previousZ is not None:
 					resolutionZ = z - previousZ
@@ -154,13 +154,21 @@ def makeGcodeVerbose(gcodeFile):
 
 				# Check if we have a resolution problem
 				# 10/18/19 - Use abs!!
+				if DEBUG:
+					print("X Resolution: " + str(resolutionX))
+					print("Y Resolution: " + str(resolutionY))
+					print("Z Resolution: " + str(resolutionZ))
 				if ( (resolutionX is not None and absNone(resolutionX) > desiredResolution) or \
 					(resolutionY is not None and absNone(resolutionY) > desiredResolution) or \
 					(resolutionZ is not None and absNone(resolutionZ) > desiredResolution) ) \
 					and z < 0.10:
 
 					# The furthest away value X Y or Z
-					maxDifference = max(absNone(resolutionX), absNone(resolutionY), absNone(resolutionZ))
+					# But convert none values to 0
+					maxDifference = max( float(absNone(resolutionX) or 0),
+										 float(absNone(resolutionY) or 0),
+										 float(absNone(resolutionZ) or 0))
+
 					# insertsNeeded is the minimum amount of "rounds" or inserts needed to achieve desired resolution
 					# Other axis that have smaller distances, will have higher resolutions
 					insertsNeeded = int(math.ceil(maxDifference / desiredResolution) )
@@ -168,12 +176,12 @@ def makeGcodeVerbose(gcodeFile):
 					# The resolutions we efficently get, should be under the desired resolution
 					effectiveResolution = float(maxDifference / insertsNeeded)
 					if DEBUG:
-						print "!!!!!!!!!!!!!!!! RESOLUTION INTERPOLATION !!!!!!!!!!!!!!!!"
-						print "ResolutionX:\t" + str(resolutionX)
-						print "ResolutionY:\t" + str(resolutionY)
-						print "ResolutionZ:\t" + str(resolutionZ)
-						print "Inserts Needed\t" + str(insertsNeeded)
-						print "Effective resolution: " + str(effectiveResolution)
+						print("!!!!!!!!!!!!!!!! RESOLUTION INTERPOLATION !!!!!!!!!!!!!!!!")
+						print("ResolutionX:\t" + str(resolutionX))
+						print("ResolutionY:\t" + str(resolutionY))
+						print("ResolutionZ:\t" + str(resolutionZ))
+						print("Inserts Needed\t" + str(insertsNeeded))
+						print("Effective resolution: " + str(effectiveResolution))
 					#y: 9 - 1 = 8
 					#8 / .5 = 16
 
@@ -215,18 +223,18 @@ def makeGcodeVerbose(gcodeFile):
 						insertLines.insert(0,newInsertLine)
 
 					if float(insertCleanX) != previousX or float(insertCleanY) != previousY or float(insertCleanZ) != previousZ:
-						print "LOGIC ERROR: Resolution Interpolation didn't perform walk back successfully"
-						print "Previous Line:\t" + previousLine
+						print("LOGIC ERROR: Resolution Interpolation didn't perform walk back successfully")
+						print("Previous Line:\t" + previousLine)
 						for insertLine in insertLines:
-							print "INSERTING:\t" + insertLine
-						print "Current Line:\t" + newLine
+							print("INSERTING:\t" + insertLine)
+						print("Current Line:\t" + newLine)
 						quit()
 
 					if DEBUG:
-						print "Previous Line:\t" + previousLine
+						print("Previous Line:\t" + previousLine)
 						for insertLine in insertLines:
-							print "INSERTING:\t" + insertLine
-						print "Current Line:\t" + newLine
+							print("INSERTING:\t" + insertLine)
+						print("Current Line:\t" + newLine)
 
 					# Insert the newly created lines into the file BEFORE we write our current line
 					# Skip first line, cause that is equal to our previous line
@@ -239,8 +247,8 @@ def makeGcodeVerbose(gcodeFile):
 					file.write(newLine + "\n")
 
 				if DEBUG:
-					print "OLD GCODE: " + str(line_clean)
-					print "NEW GCODE: " + str(newLine)
+					print("OLD GCODE: " + str(line_clean))
+					print("NEW GCODE: " + str(newLine))
 
 				previousX = x
 				previousY = y
@@ -254,10 +262,10 @@ def makeGcodeVerbose(gcodeFile):
 	# Copy the WORKING copy to the ACTUAL copy
 	try:
 		shutil.copyfile(workingFilePath, gcodeFile)
-		print "Made " + gcodeFile + " verbose"
+		print("Made " + gcodeFile + " verbose")
 	except OSError as e:
-		print "ERROR: Couldn't copy " + workingFilePath + " to " + gcodeFile
-		print "ERROR: You are going to to have to copy it yourself"
+		print("ERROR: Couldn't copy " + workingFilePath + " to " + gcodeFile)
+		print("ERROR: You are going to to have to copy it yourself")
 
 if MAC:
 	log_dir=rootdir+"/logs"
@@ -275,18 +283,17 @@ else:
 if __name__ == "__main__":
    # stuff only to run when not called via 'import' here
 	if len(sys.argv) < 2:
-		print "ERROR: You must pust at least one argument"
+		print("ERROR: You must pust at least one argument")
 		sys.exit(1)	
 
 	# First check arguments
 	for gcodeFile in sys.argv[1:]:
 		if not os.path.exists(gcodeFile):
-			print "ERROR: Argument " + gcodeFile + " does not exist"
+			print("ERROR: Argument " + gcodeFile + " does not exist")
 			sys.exit(1)
 		elif not gcodeFile.endswith('.gcode'):
-			print "ERROR: Argument " + gcodeFile + " doesn't have extension .gcode"
+			print("ERROR: Argument " + gcodeFile + " doesn't have extension .gcode")
 			sys.exit(1)
 
 	for gcodeFile in sys.argv[1:]:
-		DEBUG=True
 		makeGcodeVerbose(gcodeFile)

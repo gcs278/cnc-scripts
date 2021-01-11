@@ -1,10 +1,14 @@
+# TODO: Confirm working double jig with old transformation.
+# TODO: Confirm VBS Script working
 import glob, sys
 import os, time, fileinput
 import re, math
 import shutil
 import subprocess
 import requests
+from enum import Enum
 # from tts_watson.TtsWatson import TtsWatson
+from collections import namedtuple
 from os.path import expanduser
 home = expanduser("~")
 # Home on Virtual Machine
@@ -20,6 +24,15 @@ class bcolors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
+
+# Axis Enum
+Axis = Enum('Axis', 'x y z')
+# Point Data Structure
+Point = namedtuple('Point', 'x y z')
+# Jig Data Structure
+Jig = namedtuple('Jig', 'x_offset y_offset')
+# Slope Data Structure for Multi Z
+SlopeArea = namedtuple('SlopeArea', 'slope min max')
 
 # Global Variables
 rootdir = home + '\\Google Drive\\GS_Custom_Woodworking'
@@ -84,7 +97,7 @@ logFile = open(logFilePath, 'a')
 # handles connection errors
 def handleError(message, fatal=False):
     interpolingProc.kill()
-    print message
+    print(message)
     logFile.write(message + '\n')
     message = message.replace("gcode"," gee code")
 
@@ -104,11 +117,20 @@ def handleError(message, fatal=False):
         sys.stderr = sys.__stderr__
         sys.stdout = sys.__stdout__
         subprocess.Popen([python,playwave,audioDir + wavConnetionError])
-        print "ERROR: Could not connect to the Watson API! No internet connection!"
+        print("ERROR: Could not connect to the Watson API! No internet connection!")
 
-# zPoints should be:
-#    ( ( (9.5,-2.10), (5.5,-2.11), (1.5,-2.12) ), ( (9.5,-2.09), (5.5,-2.08), (1.5,-2.07) ) )
-def threepointMulti(realZindex, zPoints, jigs, yCenter, srcGcodeFile):
+# Convert an array of 2 points's Z Values to be relative to a center point
+def convert_to_relative_z(points, anchor_point):
+    relative_points = []
+    for point in points:
+        # Subtract the anchor point's Z Value
+        new_z = point.z - anchor_point.z
+        new_point = Point(point.x, point.y, new_z)
+        relative_points.append(new_point)
+
+    return relative_points
+
+def fivepointMulti(x_points, y_points, center_points, jigs, srcGcodeFile):
     # Put the generated files in the same area, just put it in the 
     fileBaseName = os.path.splitext(os.path.basename(srcGcodeFile))[0]
     parentName = os.path.dirname(srcGcodeFile)
@@ -122,8 +144,8 @@ def threepointMulti(realZindex, zPoints, jigs, yCenter, srcGcodeFile):
         try:
             os.remove(compFragFilesOld)
         except OSError as e:
-            print "ERROR: Can't remove " + compFragFilesOld
-            print e
+            print("ERROR: Can't remove " + compFragFilesOld)
+            print(e)
 
     if not os.path.exists(tmpdir):
         os.makedirs(tmpdir)
@@ -131,62 +153,52 @@ def threepointMulti(realZindex, zPoints, jigs, yCenter, srcGcodeFile):
     if os.path.exists(tmpFileName):
         os.remove(tmpFileName)
 
-    # This is where our machine is really indexed at (first Jig)
-    realIndex = float(zPoints[0][1][1])
+    # This is where our machine is really indexed at (always first Jig's zMid)
+    realIndex = center_points[0].z
 
     # Write standard gcodeHeader
     with open(tmpFileName,"a") as newfile:
         for gcode in gcodeHeader:
             newfile.write(gcode + '\n')
             
-        jigCount=0
+        jigCount = 0
         for jig in jigs:
-            xJigOffset = float(jig[0])
-            yJigOffset = float(jig[1])
+            xJigOffset = float(jig.x_offset)
+            yJigOffset = float(jig.y_offset)
+            # Sort to be consistent no matter the argument order
+            x_points_jig = sorted(x_points[jigCount], key=lambda pt: pt.x)
+            y_points_jig = sorted(y_points[jigCount], key=lambda pt: pt.y)
 
-            # Create zZeros
-            zZeros = []
-            yUpper = float(zPoints[jigCount][0][0])
-            zUpper = float(zPoints[jigCount][0][1])
-            zMid = float(zPoints[jigCount][1][1])
-            yLower = float(zPoints[jigCount][2][0])
-            zLower = float(zPoints[jigCount][2][1])
-            zZeros.append( (yUpper, zUpper - zMid) )
-            zZeros.append( (yCenter, 0) )
-            zZeros.append( (yLower, zLower - zMid) )
-            logFile.write("zZeros:\t\t\t" + str(zZeros) + "\n")
+            center_point = center_points[jigCount]
 
-            zJigOffset = zMid - realIndex
+            # Reconstruct incoming arrays to be relative to the centerpoints
+            x_points_relative = convert_to_relative_z(x_points_jig, center_point)
+            y_points_relative = convert_to_relative_z(y_points_jig, center_point)
+            center_point_relative = Point(center_points[jigCount].x, center_points[jigCount].y, 0) 
 
-            if DEBUG: print("zZeros:\t\t\t" + str(zZeros))
+            logFile.write("x_points_relative:\t\t\t" + str(x_points_relative) + "\n")
+            logFile.write("y_points_relative:\t\t\t" + str(y_points_relative) + "\n")
+
+            zJigOffset = center_point.z - realIndex
+
+            if DEBUG: print("x_points_relative:\t" + str(x_points_relative))
+            if DEBUG: print("y_points_relative:\t" + str(y_points_relative))
 
             # Determine the slopes for the points
-            # Old Code - Haven't even bothered, it works
-            slopes=[]
-            prev_yLoc=0
-            prev_zZero=0
-            for yLoc, zZero in zZeros:
-                if prev_yLoc != 0 or prev_zZero != 0:
-                    if yLoc >= yCenter:
-                        slope = findSlope(prev_yLoc, prev_zZero, yLoc, zZero)
-                    else:
-                        slope=-findSlope(prev_yLoc, prev_zZero, yLoc, zZero)
-                    slopes.append( (prev_yLoc, slope) )
-                prev_yLoc = yLoc
-                prev_zZero = zZero
+            slopes_areas_x = generate_slopes(x_points_relative, center_point_relative, Axis.x)
+            slopes_areas_y = generate_slopes(y_points_relative, center_point_relative, Axis.y)
 
-            # Add this fake one inthere for last slope to be calculated
-            # Otherwise for loop stops short
-            # TODO fix this
-            slopes.append((0,1))
-            logFile.write("Slopes:\t\t\t" + str(slopes) + "\n")
-            # Test function
-            #for x in xrange(100):
-                #print findNewOffset(x*0.1,slopes, zZeros)
+
+            logFile.write("slopes_areas_x:\t\t\t" + str(slopes_areas_x) + "\n")
+            logFile.write("slopes_areas_y:\t\t\t" + str(slopes_areas_y) + "\n")
+
+            if DEBUG: print("slopes_areas_x:\t" + str(slopes_areas_x))
+            if DEBUG: print("slopes_areas_y:\t" + str(slopes_areas_y))
 
             # Touch temp file to temp location so we don't modify the real one
             os.utime(tmpFileName, None)
 
+            previousX = None
             previousY = None
             with open(srcGcodeFile) as file:
                 for line in file:
@@ -194,8 +206,13 @@ def threepointMulti(realZindex, zPoints, jigs, yCenter, srcGcodeFile):
                     match = gcodeRegex.match(line_clean)
                     if match:
                         if DEBUG:
-                            print "--------------------------------"
-                            print "OLD GCODE: " + str(line_clean)
+                            print("--------------------------------")
+                            print("OLD GCODE: " + str(line_clean))
+
+                        x = None
+                        # Get X Value
+                        if match.group(3):
+                            x = float(match.group(3))
 
                         y = None
                         # Get Y Value
@@ -206,21 +223,24 @@ def threepointMulti(realZindex, zPoints, jigs, yCenter, srcGcodeFile):
                             # We just have Z instruction and no X or Y, so use last Y
                             # In theory, verbose GCODE should never let this happen anymore (old code)
                             # But there could be the case where we don't verbose the gcode
-                            if DEBUG: print "NO Y instruction, using previous offset"
+                            if DEBUG: print("NO Y instruction, using previous offset")
                             y = previousY
                         elif y is None and previousY is None:
-                            if DEBUG: print "NO Y instruction, NO last Y, not applying offset"
+                            if DEBUG: print("NO Y instruction, NO last Y, not applying offset")
                         
                         # Set the previousY value
+                        previousX = x
                         previousY = y
 
-                        if DEBUG: print "Y Value: " + bcolors.FAIL + str(y)+ bcolors.ENDC
+                        if DEBUG: print("X Value: " + bcolors.FAIL + str(x)+ bcolors.ENDC)
+                        if DEBUG: print("Y Value: " + bcolors.FAIL + str(y)+ bcolors.ENDC)
 
-                        # If we don't have a Y yet, then just don't calculate it
+                        # If we don't have a X and Y yet, then just don't calculate it
                         zOffset = 0 # Default
-                        if y is not None:
+                        if y is not None and x is not None:
                             # Don't forget to add in zJigOffset
-                            zOffset = findNewOffset(y, slopes, zZeros) + zJigOffset
+                            point = Point(x, y, z)
+                            zOffset = findNewOffset(point, slopes_areas_x, slopes_areas_y, center_point_relative) + zJigOffset
 
                         # If Z is already positive, it means the that the machine is not cutting, but 
                         # just moving around. Don't mess with these values
@@ -237,65 +257,101 @@ def threepointMulti(realZindex, zPoints, jigs, yCenter, srcGcodeFile):
 
                         if DEBUG:
                             # print "Z Value: " + str(z)
-                            print("Z Offset: " + str(zOffset))
+                            print("Z Offset TOTAL: " + str(round(zOffset,2)))
                             # print "New Z: " + str(newZ)
                             print("xJigOffset: " + str(xJigOffset))
                             print("yJigOffset: " + str(yJigOffset))
                             print("zJigOffset: " + str(zJigOffset))
-                            print "NEW GCODE: " + str(newGcode)
-                            print "ZEROS: " + str(zZeros)
-                            print "SLOPES: " + str(slopes)
+                            print("NEW GCODE: " + str(newGcode))
+                            # print "ZEROS: " + str(zZeros)
+                            # print "SLOPES: " + str(slopes)
                             print("JIG: " + str(jigCount))
 
             jigCount+=1
-            handleError("JIG " + str(jigCount) + ": The largest Z differential is " + str("{0:.3f}".format(max(zZeros[0][1], zZeros[-1][1], zZeros[0][1], zZeros[-1][1]))))
+            # handleError("JIG " + str(jigCount) + ": The largest Z differential is " + str("{0:.3f}".format(max(zZeros[0][1], zZeros[-1][1], zZeros[0][1], zZeros[-1][1]))))
 
         # Write our standard gcode footer on the COMBO file
         for gcode in gcodeFooter:
             newfile.write(gcode + '\n')     
 
-    print "FINSIHED ZEROING"
+    print("FINSIHED ZEROING")
     
     return tmpFileName
 
+# This function generates the slope areas
+# Slope areas consist of boundaries of where slopes apply
+def generate_slopes(points, center_point, axis):
+        
+    slope_areas = []
+    for point in points:
+        # Determine what axis we want to generate slope areas for
+        if axis == Axis.x:
+            point_xy = point.x
+            center_point_xy = center_point.x
+        elif axis == Axis.y:
+            point_xy = point.y
+            center_point_xy = center_point.y
+
+        # Calculate the slope of the points
+        slope = findSlope(point_xy, point.z, center_point_xy, center_point.z)
+
+        # Negate due to references shifting on center
+        if (axis == Axis.x and point.x < center_point.x) or (axis == Axis.y and point.y < center_point.y):
+            slope = -slope
+
+        # Get mins/maxs for slope area boundaries
+        print("Generate Slopes: " + str(point) + " " + str(center_point))
+        point_min = min(point_xy,center_point_xy)
+        point_max = max(point_xy,center_point_xy)
+        slope_area = SlopeArea(slope, point_min, point_max)
+        slope_areas.append(slope_area)
+
+    return slope_areas
+
 def findSlope(x1, y1, x2, y2):
-    m = (y2-y1)/(x2-x1)
+    try:
+        m = (y2-y1)/(x2-x1)
+    except ZeroDivisionError:
+        m = 0
     return m
 
-def findNewOffset(y, slopes, zeros):
-    mySlope=0
-    prev_yLoc=0
-    prev_slope=0
+# Finds the slope given a point, slope area, and an axis
+def find_slope_in_areas(point, slope_areas, axis):
+    if axis == Axis.x:
+        point_xy = point.x
+    elif axis == Axis.y:
+        point_xy = point.y
 
-    # Max and Min
-    maxY = max(zeros)[0]
-    minY = min(zeros)[0]
+    # Try to find if the point is in between any areas
+    slope = None
+    for slope_area in slope_areas:
+        if slope_area.min <= point_xy <= slope_area.max: 
+            slope = slope_area.slope
+    
+    # If it isn't in between two areas, then use min/max
+    if slope is None:
+        min_slope_area = min(slope_areas, key = lambda i: i.min)
+        max_slope_area = max(slope_areas, key = lambda i: i.max)
+        if point_xy < min_slope_area.min: slope = min_slope_area.slope
+        if point_xy > max_slope_area.max: slope = max_slope_area.slope
 
-    # If greater than max, just use max value
-    if y > maxY:
-        for yLoc, zero in zeros:
-            if maxY == yLoc:
-                return zeros[0][1]
+    return slope
 
-    # If less than min, just use min value
-    if y < minY:
-        for yLoc, zero in zeros:
-            if minY == yLoc:
-                return zeros[-1][1]
+def findNewOffset(point, x_slope_areas, y_slope_areas, center_point):
+    # Calculate the Z Offset produced by X Slope Areas
+    x_slope = find_slope_in_areas(point, x_slope_areas, Axis.x)
+    y_slope = find_slope_in_areas(point, y_slope_areas, Axis.y)
 
-    # This logic to find the relevant slope
-    for yLoc, slope in slopes:
-        if prev_yLoc != 0 and prev_slope != 0:
-            if y <= prev_yLoc and y > yLoc:
-                mySlope = prev_slope
-        prev_yLoc = yLoc
-        prev_slope = slope
-    # y=mx+b
-    if y > yCenter:
-        newOffset = mySlope*(y-yCenter)
-    else:
-        newOffset = mySlope*(yCenter-y)
-    return newOffset
+    # y = mx + b (aka z = m[x|y] + b)
+    # Solving for 
+    z_offset_for_x = x_slope * abs(point.x - center_point.x)
+    z_offset_for_y = y_slope * abs(point.y - center_point.y)
+    total_z_offset = z_offset_for_x + z_offset_for_y
+
+    if DEBUG:
+        print(f"Z Offset For X: {round(z_offset_for_x,2)}")
+        print(f"Z Offset For Y: {round(z_offset_for_y,2)}")
+    return total_z_offset
 
 # Function that take our standard regex match and applies the provided offset
 # to build a new gcode string
@@ -354,8 +410,8 @@ def combineFragments(realZindex, fragmentsDir, jigFragments, jigs):
             else:
                 shutil.rmtree(fragTmpToDelete, ignore_errors=True) 
         except OSError as e:
-            print "ERROR: Can't remove " + fragTmpToDelete
-            print e
+            print("ERROR: Can't remove " + fragTmpToDelete)
+            print(e)
 
     os.mkdir(fragmentsDirTmp)
     combinedFragmentsFile=fragmentsDir + slash + parentName + "_COMPILEDFRAGMENTS_"+timestr+".gcode"
@@ -365,8 +421,8 @@ def combineFragments(realZindex, fragmentsDir, jigFragments, jigs):
         try:
             os.remove(compFragFilesOld)
         except OSError as e:
-            print "ERROR: Can't remove " + compFragFilesOld
-            print e
+            print("ERROR: Can't remove " + compFragFilesOld)
+            print(e)
 
     # Open the combo file that includes EVERYthing compiled
     with open(combinedFragmentsFile,"a") as outFile:
@@ -381,8 +437,8 @@ def combineFragments(realZindex, fragmentsDir, jigFragments, jigs):
             for fragment in jigFragments[jigCount]:
                 fileName = fragment[0]
                 fragmentZ = float(fragment[1])
-                xJigOffset = float(jig[0])
-                yJigOffset = float(jig[1])
+                xJigOffset = float(jig.x_offset)
+                yJigOffset = float(jig.y_offset)
                 # Offset that should be applied to Z
                 zOffset = fragmentZ - realZindex
                 fragmentFile = fragmentsDir + slash + fileName
@@ -459,8 +515,8 @@ def doubleJigSimpleZ(doubleJigXoff, doubleJigYoff, realZindex, secondZindex, tar
     zOffset = secondZindex - realZindex 
 
     if DEBUG:
-        print "Double Jig Simple Z"
-        print "Z Offset" + str(zOffset)
+        print("Double Jig Simple Z")
+        print("Z Offset" + str(zOffset))
 
     # Second add the second jig file, with the offset
     with open(targetFile) as file:
@@ -504,8 +560,10 @@ try:
                 logFile.write("Current Time:\t" + time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()) + "\n")
                 with open(argFile) as file:
                     multiType = file.readline().strip()
-                    print multiType
+                    print(multiType)
                     logFile.write("Z Program Type: " + multiType + "\n")
+                    compiledFile = None
+
                     if multiType == "THREEPOINT":
                         zArgs = file.readline() # int int int \r\n
                         logFile.write("ZArgs:\t\t\t" + zArgs)
@@ -517,9 +575,8 @@ try:
                         # Replace for my vm environment to work
                         targetFile = targetFile.replace("Z:\\\\","\\\\vmware-host\\")
                         targetFile = targetFile.replace("z:\\\\","\\\\vmware-host\\")
-                        print targetFile
+                        print(targetFile)
                         logFile.write("File:\t\t\t" + targetFile + "\n")
-                        compiledFile = None
                         if not os.path.exists(targetFile):
                             error="The gcodefile arg file given isn't found. I'm cleaning this up"
                             handleError(error)
@@ -528,12 +585,12 @@ try:
                             yArgList = yArgs.split()
                             if len(yArgList) < 3 or float(yArgList[0]) == 0.00 or float(yArgList[1]) == 0.00 or float(yArgList[2]) == 0.00:
                                 error='ERROR: Either yArgs are nothing or there is a zero in the Yargs and should never be a zero'
-                                print error
+                                print(error)
                                 logFile.write(error + "\n")
                                 interpolingProc.kill()
                             elif len(zArgList) < 3:
                                 error='ERROR: zargs are nothing or missing'
-                                print error
+                                print(error)
                                 logFile.write(error+ "\n")
                                 interpolingProc.kill()
                             elif len(zArgList) == 3 and len(yArgList) == 3 and yCenter != 0:
@@ -564,13 +621,13 @@ try:
                                     warningMessage="WARNING: The BOTTOM of the blank is " + str(WARNING_Z) + " inches higher than the middle!"
                                     handleError(warningMessage)
 
-                                print "RUNNING"
-                                print "ZEROS" + str(zZeros)
+                                print("RUNNING")
+                                print("ZEROS" + str(zZeros))
                                 compiledFile = threepointSingle(zZeros)
                                 subprocess.Popen([python,playwave,audioDir + wavSuccess])
                             else:
                                 interpolingProc.kill()
-                                print "Cannot parse " + argFile
+                                print("Cannot parse " + argFile)
 
                         # Write the done file with the name of the file we are delivering
                         with open(argFile + ".done", 'a') as doneFile:
@@ -581,7 +638,7 @@ try:
                         if not compiledFile is None:
                             handleError("Successfully compiled gcode. The largest Z differential is " + str("{0:.3f}".format(max(zZeros[0][1], zZeros[-1][1], zZeros[0][1], zZeros[-1][1]))))
 
-                    elif multiType == "FRAGMENTED" or multiType == "THREEPOINT_MULTI":
+                    elif multiType == "FRAGMENTED" or multiType == "FIVEPOINT_MULTI":
                         fragments = []
                         realZindex = None
                         xJigOffset = None
@@ -591,8 +648,10 @@ try:
                         gcodePath = file.readline().strip()
                         compiledFile = None
                         isError = False
-                        yCenter = None # THREEPOINT_MULTI ONLY
-
+                        # FivePoint Multi Only
+                        x_multi_points = [[]] # 2D Multi Points, multiple per jig
+                        y_multi_points = [[]]
+                        center_multi_points = [] # Center Points are 1D - Never two centers
 
                         for line in file:
                             print(line.rstrip())
@@ -610,25 +669,35 @@ try:
                                     handleError("FATAL ERROR FATAL ERROR: A fragment measured with a value of 0!", True)
                                     isError = True
                                 fragments.append((line_clean[0], z))
-                            elif line_clean[0] == "POINT":
-                                # Add multi points for THREEPOINT_MULTI
-                                z = float(line_clean[2])
-                                if z == 0.00:
-                                    handleError("FATAL ERROR FATAL ERROR: A fragment measured with a value of 0!", True)
+                            elif line_clean[0] == "YPOINT" or line_clean[0] == "XPOINT" or line_clean[0] == "CENTERPOINT":
+                                # Get XYZ array (x,y,z) and turn it into a Point using argument unpacking
+                                xyz = Point(*[float(i) for i in line_clean[1].split(',')])
+                                
+                                if xyz.z == 0.00:
+                                    handleError("FATAL ERROR FATAL ERROR: A point measured with a Z value of 0!", True)
                                     isError = True
-                                fragments.append((float(line_clean[1]), z))
+                                if xyz.x == 0.00 or xyz.y == 0.00:
+                                    handleError("FATAL ERROR FATAL ERROR: A x or y multi point can't be zero!", True)
+                                    isError = True
+
+                                if line_clean[0] == "YPOINT":
+                                    y_multi_points[len(jigs)-1].append(xyz)
+                                elif line_clean[0] == "XPOINT":
+                                    x_multi_points[len(jigs)-1].append(xyz)
+                                elif line_clean[0] == "CENTERPOINT":
+                                    center_multi_points.append(xyz)
                             elif line_clean[0] == "xJigOffset":
                                 # Once we hit xJigOffset again, we should save our .gcode offsets
                                 if len(jigs) > 0:
                                     jigFragments.append(fragments)
                                     fragments=[]
+                                    x_multi_points.append([])
+                                    y_multi_points.append([])
+
                                 xJigOffset = float(line_clean[1])
                             elif line_clean[0] == "yJigOffset":
                                 yJigOffset = float(line_clean[1])
-                                jigs.append((xJigOffset, yJigOffset))
-                            elif line_clean[0] == "yCenter":
-                                yCenter = float(line_clean[1])
-                                
+                                jigs.append(Jig(xJigOffset, yJigOffset))
 
                         # Store the final fragments
                         jigFragments.append(fragments)
@@ -636,14 +705,26 @@ try:
                         ########### Validation ################
                         if DEBUG:
                             print("gcodePath: " + gcodePath)
-                            print("Fragments: ")
-                            for jigFragment in jigFragments:
-                                print("Jig:\t\t\t" + str(jigFragment))
-
+                            if multiType == "FRAGMENTED":
+                                print("Fragments: ")
+                                for jigFragment in jigFragments:
+                                    print("Jig:\t\t\t" + str(jigFragment))
+                            elif multiType == "FIVEPOINT_MULTI":
+                                print("x_multi_points:\t\t" + str(x_multi_points))
+                                print("y_multi_points:\t\t" + str(y_multi_points))
+                                print("center_multi_points:\t" + str(center_multi_points))
+                            
                         # Specific Errors
                         if multiType == "FRAGMENTED":
                             # Fragmented Only Errors
-                            if not os.path.isdir(gcodePath):
+                            if any(0 in fragment for fragment in fragments):
+                                handleError("FATAL ERROR FATAL ERROR: One of the fragment/point measurements is equal to ZERO! ", True)
+                                isError = True
+                            elif len(jigs) != len(jigFragments):
+                                # Why?
+                                handleError("FATAL ERROR FATAL ERROR: Number of jigs doesn't match jig fragments", True)
+                                isError = True
+                            elif not os.path.isdir(gcodePath):
                                 handleError("FATAL ERROR FATAL ERROR: The given fragments dir doesn't exist: " + gcodePath, True)
                                 isError = True
                             elif realZindex is None:
@@ -652,30 +733,23 @@ try:
                             elif realZindex is 0:
                                 handleError("FATAL ERROR FATAL ERROR: real z index is equal to ZERO! ", True)
                                 isError = True
-                        elif multiType == "THREEPOINT_MULTI":
+                            elif not fragments:
+                                handleError("FATAL ERROR FATAL ERROR: Couldn't parse fragments values from agruments file", True)
+                                isError = True
+                        elif multiType == "FIVEPOINT_MULTI":
                             if not os.path.isfile(gcodePath):
                                 handleError("FATAL ERROR FATAL ERROR: The given gcode file path doesn't exist: " + gcodePath, True)
                                 isError = True
-                            elif yCenter is None:
+                            elif len(center_multi_points) != len(jigs):
                                 handleError("FATAL ERROR FATAL ERROR: Missing y center for threepoint multi program", True)
                                 isError = True
 
                         # Common Errors
-                        if any(0 in fragment for fragment in fragments):
-                            handleError("FATAL ERROR FATAL ERROR: One of the fragment/point measurements is equal to ZERO! ", True)
-                            isError = True
-                        elif xJigOffset is None or yJigOffset is None:
+                        if xJigOffset is None or yJigOffset is None:
                             handleError("FATAL ERROR FATAL ERROR: Couldn't get jig offsets from arguments file!", True)
-                            isError = True
-                        elif len(jigs) != len(jigFragments):
-                            # Why?
-                            handleError("FATAL ERROR FATAL ERROR: Number of jigs doesn't match jig fragments", True)
                             isError = True
                         elif gcodePath is None:
                             handleError("FATAL ERROR FATAL ERROR: Couldn't parse fragments dir from arguments file!", True)
-                            isError = True
-                        elif not fragments:
-                            handleError("FATAL ERROR FATAL ERROR: Couldn't parse fragments values from agruments file", True)
                             isError = True
                         
                         # If no errors, attempt to compile the gcode
@@ -707,13 +781,13 @@ try:
                                 if not compiledFile is None:
                                     handleError("Successfully compiled gcode. The largest Z differential is " + str("{0:.3f}".format(largestZdiff)))
 
-                            elif multiType == "THREEPOINT_MULTI":
-                                compiledFile = threepointMulti(realZindex, jigFragments, jigs, yCenter, gcodePath)
+                            elif multiType == "FIVEPOINT_MULTI":
+                                compiledFile = fivepointMulti(x_multi_points, y_multi_points, center_multi_points, jigs, gcodePath)
 
                                 # Success message
                                 if not compiledFile is None:
                                     handleError("Successfully compiled multi point gcode.")
-        
+
                         # Write the done file with the name of the file we are delivering
                         with open(argFile + ".done", 'a') as doneFile:
                             if not compiledFile is None:
@@ -729,11 +803,11 @@ try:
 
                         realZindex = float(file.readline())
                         realZindexLog = "Real Z Index:\t\t\t" + str(realZindex)
-                        print realZindexLog
+                        print(realZindexLog)
                         logFile.write(realZindexLog + '\n')
                         secondZindex = float(file.readline())
                         secondZindexLog = "Second Z Index:\t\t\t" + str(secondZindex)
-                        print secondZindexLog
+                        print(secondZindexLog)
                         logFile.write(secondZindexLog + '\n')
                         targetFile = os.path.expanduser(file.readline()).strip() # string
                         # Replace for my vm environment to work
@@ -754,11 +828,12 @@ try:
                             handleError("Successfully compiled gcode. The Z differential is " + str("{0:.3f}".format(realZindex - secondZindex)))
                     else:	
                         error = "ERROR: Unrecognized multi type: " + multiType
-                        print error
+                        print(error)
                         # Write the done file with the name of the file we are delivering
                         with open(argFile + ".done", 'a') as doneFile:
-                            if not compiledFile is None:
-                                doneFile.write(error + "\n")
+                            doneFile.write(error + "\n")
+
+                            if compiledFile:
                                 # Base name
                                 doneFile.write(os.path.splitext(os.path.basename(compiledFile))[0])
                 # Remove the temp file
@@ -768,7 +843,7 @@ try:
                 # Touch temp file to temp location so we don't modify the real one
 
         except OSError as e:
-            print e
+            print(e)
             open(argFile + ".done", 'a').close()
 
         time.sleep(1)
